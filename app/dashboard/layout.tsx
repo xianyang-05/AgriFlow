@@ -1,0 +1,161 @@
+"use client"
+
+import { useState } from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
+import { 
+  Leaf, LayoutDashboard, Bug, CloudSun, Map, Package, 
+  Settings, HelpCircle, LogOut, Bell, Droplets, Snowflake,
+  Activity, Radio, Play, Plus
+} from "lucide-react"
+
+const navigation = [
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Pest Detection", href: "/dashboard/pest", icon: Bug },
+  { name: "Climate & Risk", href: "/dashboard/climate", icon: CloudSun },
+  { name: "Farm Map", href: "/dashboard/map", icon: Map },
+  { name: "Supply & Output", href: "/dashboard/supply", icon: Package },
+]
+
+const shortcuts = [
+  { name: "Alerts", icon: Bell, updated: "UPD 12.08" },
+  { name: "Irrigation", icon: Droplets, updated: "UPD 19.02" },
+  { name: "Soil Health", icon: Activity, updated: "UPD 11.04" },
+  { name: "Sensors", icon: Radio, updated: "UPD 13.04" },
+  { name: "Scenes", icon: Play, updated: "UPD 24.01" },
+]
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const pathname = usePathname()
+  const [autoIrrigation, setAutoIrrigation] = useState(true)
+  const [frostProtection, setFrostProtection] = useState(true)
+
+  return (
+    <div className="min-h-screen bg-[#f5f0e8] flex">
+      {/* Dark Sidebar */}
+      <aside className="fixed inset-y-0 left-0 z-50 flex flex-col w-56 bg-[#1a1a1a]">
+        {/* Logo */}
+        <div className="h-16 flex items-center justify-between px-4">
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 bg-[#c41e3a] rounded-sm" />
+              <div className="w-2 h-2 bg-[#c41e3a] rounded-sm" />
+            </div>
+            <span className="font-bold text-white tracking-tight">AGRITWIN</span>
+          </Link>
+          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center">
+            <span className="text-xs font-medium text-white">JD</span>
+          </div>
+        </div>
+
+        {/* Auto Scenes Section */}
+        <div className="px-4 py-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-white/90 text-sm font-medium">Auto scenes</span>
+            <span className="text-white/50 text-xs">Details</span>
+          </div>
+          
+          <div className="space-y-2">
+            <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+              <div className="flex items-center gap-3">
+                <Droplets className="h-4 w-4 text-white/70" />
+                <span className="text-white/90 text-sm">Auto irrigation</span>
+              </div>
+              <Switch 
+                checked={autoIrrigation} 
+                onCheckedChange={setAutoIrrigation}
+                className="data-[state=checked]:bg-[#22c55e]"
+              />
+            </div>
+            
+            <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
+              <div className="flex items-center gap-3">
+                <Snowflake className="h-4 w-4 text-white/70" />
+                <span className="text-white/90 text-sm">Frost Protection</span>
+              </div>
+              <Switch 
+                checked={frostProtection} 
+                onCheckedChange={setFrostProtection}
+                className="data-[state=checked]:bg-[#22c55e]"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Settings Shortcuts */}
+        <div className="px-4 py-2">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-white/90 text-sm font-medium">Settings</span>
+            <span className="text-white/50 text-xs">Details</span>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-2">
+            {shortcuts.map((shortcut) => {
+              const Icon = shortcut.icon
+              return (
+                <button
+                  key={shortcut.name}
+                  className="flex flex-col items-start p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
+                >
+                  <Icon className="h-5 w-5 text-white/70 mb-2" />
+                  <span className="text-white/90 text-xs font-medium">{shortcut.name}</span>
+                  <span className="text-white/40 text-[10px]">{shortcut.updated}</span>
+                </button>
+              )
+            })}
+            <button className="flex flex-col items-center justify-center p-3 rounded-xl border border-dashed border-white/20 hover:border-white/40 transition-colors">
+              <Plus className="h-5 w-5 text-white/50" />
+              <span className="text-white/50 text-[10px] mt-1">Add Shortcut</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Navigation Links */}
+        <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto mt-2">
+          {navigation.map((item) => {
+            const isActive = pathname === item.href
+            const Icon = item.icon
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${
+                  isActive
+                    ? "bg-[#22c55e] text-white"
+                    : "text-white/70 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                <Icon className="h-4 w-4 flex-shrink-0" />
+                <span className="text-sm">{item.name}</span>
+              </Link>
+            )
+          })}
+        </nav>
+
+        {/* Bottom Section */}
+        <div className="p-3 border-t border-white/10 flex items-center justify-between">
+          <button className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+            <LogOut className="h-4 w-4 text-white/60" />
+          </button>
+          <button className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+            <HelpCircle className="h-4 w-4 text-white/60" />
+          </button>
+          <button className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+            <Settings className="h-4 w-4 text-white/60" />
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 ml-56">
+        {children}
+      </main>
+    </div>
+  )
+}
