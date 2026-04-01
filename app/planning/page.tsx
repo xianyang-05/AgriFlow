@@ -488,10 +488,10 @@ export default function PlanningPage() {
 
             {/* Action Button */}
             <Button 
-              onClick={() => router.push("/dashboard")} 
+              onClick={() => router.push(`/execution-plan?crop=${selectedCrop}`)} 
               className="w-full h-12 gap-2 text-base"
             >
-              Apply Plan & View Dashboard
+              Generate Execution Plan
               <ArrowRight className="h-4 w-4" />
             </Button>
           </div>
