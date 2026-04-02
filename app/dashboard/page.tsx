@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -93,29 +93,14 @@ function CircularProgress({
 }
 
 export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState("Dashboard")
-  const tabs = ["Dashboard", "Harvest", "Customization", "Settings"]
-
   return (
     <div className="min-h-screen bg-[#f5f0e8]">
-      {/* Top Navigation */}
-      <header className="sticky top-0 z-40 bg-[#f5f0e8]/95 backdrop-blur-sm">
+      {/* Header */}
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="px-8 h-16 flex items-center justify-between">
-          <nav className="flex items-center gap-8">
-            {tabs.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`text-sm font-medium transition-colors ${
-                  activeTab === tab 
-                    ? "text-[#1a1a1a]" 
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </nav>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-lg text-foreground">Dashboard</span>
+          </div>
           
           <div className="flex items-center gap-3">
             <button className="p-2 rounded-full hover:bg-white/50 transition-colors">
@@ -125,9 +110,6 @@ export default function DashboardPage() {
               <Bell className="h-5 w-5 text-gray-600" />
               <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full" />
             </button>
-            <Button className="bg-[#c41e3a] hover:bg-[#a01830] text-white rounded-full px-4 h-9">
-              + Add Member
-            </Button>
           </div>
         </div>
       </header>
