@@ -49,7 +49,7 @@ export default function SelectMap({ onLocationSelect, searchedLocation }: Select
   return (
     <div className="h-[300px] w-full rounded-md overflow-hidden border border-border mt-4">
       <MapContainer
-        center={[51.505, -0.09]} // Default center before user location is found
+        center={[3.1390, 101.6869]} // Default center before user location is found
         zoom={13}
         scrollWheelZoom={true}
         className="h-full w-full"
