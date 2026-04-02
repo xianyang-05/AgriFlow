@@ -1,0 +1,156 @@
+🎨 🌾 AgriFlow – Crop Execution Plan UI (Design Instruction)
+🧩 Overall Style
+Theme: Friendly, human-centered farming assistant
+Visual Style:
+Flat human illustrations (farmer doing actions like planting, watering, harvesting)
+Soft earthy colors:
+Green (#4CAF50), Brown (#8D6E63), Light Beige (#F5F5DC)
+Rounded cards (border-radius: 16–24px)
+Minimal text, icon + visual focused
+Feeling: Simple, warm, non-technical (for real farmers)
+🖥️ Page Layout (Main Structure)
+---------------------------------------------------------
+| Header (Crop Name + Summary)                          |
+---------------------------------------------------------
+| Left: Execution Timeline     | Right: AI Chatbot      |
+| (70%)                        | (30%)                  |
+---------------------------------------------------------
+
+🌱 1. Header Section (Top)
+Content:
+🌾 Crop Name (e.g. “Tomato Plan”)
+⏱ Duration (e.g. 90 days)
+💰 Estimated Profit
+📊 Yield
+⚠️ Risk level
+UI:
+Horizontal card
+Small icons beside each metric
+🧭 2. Execution Timeline (MAIN FEATURE)
+Layout Style:
+
+Vertical scrollable step cards
+
+Each step = one farming phase
+
+🌿 Step Card Design (Repeat Component)
+
+Each card contains:
+
+🔸 Left: Illustration
+Human-style drawing (like your image)
+Example:
+Preparation → farmer digging soil
+Planting → farmer placing seedlings
+Watering → farmer watering crops
+Harvest → farmer holding crops
+🔸 Right: Information Panel
+🏷️ Phase Title
+Example: “Planting Phase”
+⏱ Duration
+“Day 1 – Day 7”
+📌 Key Focus
+Bullet points:
+Ensure soil is moist
+Maintain spacing between plants
+💧 Water Plan
+“2L per plant daily”
+Small water icon
+🧪 Fertilizer Plan
+“NPK 10-10-10, apply every 7 days”
+Fertilizer icon
+⚠️ Risk Alerts
+“Overwatering may cause root rot”
+Warning icon (yellow/red)
+🎥 Learning Section
+Button: “Watch Tutorial”
+Button: “Read Guide”
+✏️ Edit Button (IMPORTANT)
+“Adjust Plan”
+Opens small popup:
+Change water amount
+Change fertilizer
+Adjust timing
+🎯 3. Icons (VERY IMPORTANT for your concept)
+
+Each phase must have a clear icon
+
+Examples:
+
+🌱 Preparation → shovel icon
+🌿 Planting → seed icon
+💧 Watering → water drop icon
+🌾 Growth → leaf icon
+🍅 Harvest → basket icon
+
+👉 Combine icon + illustration = strong visual impact
+
+🤖 4. AI Chatbot (Right Panel)
+Layout:
+
+Sticky panel on the right side
+
+UI Structure:
+Top:
+“AgriFlow Assistant 🌱”
+Chat Area:
+Message bubbles
+Farmer questions vs AI answers
+Input Box:
+Placeholder:
+“Ask anything about your crop…”
+Smart Features:
+💡 Context-aware responses
+
+AI knows:
+
+Selected crop
+Current phase
+User plan
+Example Questions:
+“Why are my leaves yellow?”
+“Is 2L water too much?”
+“Can I harvest earlier?”
+⚡ Quick Action Buttons:
+“Adjust Water Plan”
+“Reduce Cost”
+“Optimize Yield”
+🔄 5. Real-Time Plan Adjustment (KEY FEATURE)
+
+When user:
+
+Changes water
+Changes fertilizer
+Changes schedule
+
+👉 System instantly updates:
+
+📊 Yield prediction
+💰 Profit
+⚠️ Risk level
+UI Behavior:
+Smooth animation
+Highlight changed values
+📅 6. Optional: Task Mode Toggle
+
+Add a switch:
+
+🔘 “View as Timeline”
+🔘 “View as Tasks”
+
+Task Mode:
+Checklist style:
+✅ Day 1: Prepare soil
+⬜ Day 3: Plant seeds
+⬜ Day 5: Water crops
+🏆 Final Experience Flow
+User selects crop
+Lands on this page
+Sees:
+Visual farming steps (VERY engaging)
+Clear actions to follow
+Can:
+Learn (videos + guides)
+Ask AI
+Adjust plan
+System adapts in real-time
