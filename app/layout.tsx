@@ -8,7 +8,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'AgriTwin AI - Intelligent Farming System',
+  title: 'AgriFlow - Intelligent Farming System',
   description: 'AI-driven farming platform for smart planning, real-time monitoring, and data-driven decision making',
   generator: 'v0.app',
   icons: {

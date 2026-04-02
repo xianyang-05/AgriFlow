@@ -1,16 +1,59 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Leaf, MapPin, Ruler, Wallet, FlaskConical, ArrowRight, CheckCircle2, HelpCircle, Image as ImageIcon, Send, Loader2, Bot, User } from "lucide-react"
+import { Leaf, MapPin, Ruler, Wallet, FlaskConical, ArrowRight, CheckCircle2, HelpCircle, Image as ImageIcon, Send, Loader2, Bot, User, X } from "lucide-react"
 import dynamic from 'next/dynamic'
 import Image from "next/image"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog"
+
+const extractDimension = (str: string) => {
+  const match = str.match(/[\d.]+/);
+  const count = match ? parseFloat(match[0]) : 0;
+  if (!count) return 0;
+
+  const lowerStr = str.toLowerCase();
+  
+  // Define approximate length of objects in meters
+  const objectLengths: Record<string, number> = {
+    'broom': 1.2,
+    'brooms': 1.2,
+    'car': 4.5,
+    'cars': 4.5,
+    'bus': 12,
+    'buses': 12,
+    'shoe': 0.3,
+    'shoes': 0.3,
+    'step': 0.75,
+    'steps': 0.75,
+    'person': 1.7,
+    'people': 1.7,
+    'football pitch': 105,
+    'football pitches': 105,
+  };
+
+  // Find if any object is mentioned
+  let multiplier = 1; // Default to meters
+  for (const [obj, length] of Object.entries(objectLengths)) {
+    if (lowerStr.includes(obj)) {
+      multiplier = length;
+      break;
+    }
+  }
+
+  // Handle explicit units too
+  if (lowerStr.includes("cm") || lowerStr.includes("centimeter")) multiplier = 0.01;
+  else if (lowerStr.includes("km") || lowerStr.includes("kilometer")) multiplier = 1000;
+  else if (lowerStr.includes("feet") || lowerStr.includes("ft") || lowerStr.includes("foot")) multiplier = 0.3048;
+  else if (lowerStr.includes("inch") || lowerStr.includes("in")) multiplier = 0.0254;
+
+  return count * multiplier;
+}
 
 const SelectMap = dynamic(() => import('@/components/SelectMap'), { ssr: false })
 
@@ -22,12 +65,12 @@ const steps = [
 ]
 
 const soilTypesInfo = [
-  { id: "loamy", name: "Loamy Soil", image: "/soil/loamy_soil_1775015791041.png", desc: "A balanced mixture of sand, silt, and clay. Considered the ideal soil for most agricultural uses due to its excellent moisture retention and nutrient-rich composition." },
-  { id: "clay", name: "Clay Soil", image: "/soil/clay_soil_1775016303702.png", desc: "Dense soil with tiny particles that stick together. Holds moisture and nutrients well, but can be prone to poor drainage and becomes hard when dry." },
-  { id: "sandy", name: "Sandy Soil", image: "/soil/sandy_soil_1775016320859.png", desc: "Loose and granular soil that drains water quickly. Warms up fast in spring but struggles to retain nutrients and moisture, requiring frequent irrigation." },
-  { id: "silt", name: "Silt Soil", image: "/soil/silt_soil_1775016335728.png", desc: "Fine, smooth soil particles that retain water well. Very fertile but easily compacted and prone to waterlogging." },
-  { id: "peat", name: "Peat Soil", image: "/soil/peat_soil_1775016349935.png", desc: "Dark and rich in organic material. Excellent for retaining moisture but can be highly acidic, often requiring amendments to balance pH." },
-  { id: "chalky", name: "Chalky Soil", image: "/soil/chalky_soil_1775016364929.png", desc: "Highly alkaline soil containing large stones or limestone. Drains freely but can cause stunted growth in plants lacking iron or manganese." }
+  { id: "loamy", name: "Loamy Soil", image: "/soil/loamy_soil_1775015791041.png", desc: "I can feel the crumbly, perfect texture of this loamy soil. It holds a pleasant moisture without being soaking wet, and it has a rich, dark-orange to brown hue. You can just tell it's full of life and nutrients." },
+  { id: "clay", name: "Clay Soil", image: "/soil/clay_soil_1775016303702.png", desc: "Touching this clay soil, it feels distinctively dense, sticky and heavy when wet. The dark reddish-grey hue gives it away. It holds together like modeling clay when you squeeze it, indicating strong moisture retention but poor drainage." },
+  { id: "sandy", name: "Sandy Soil", image: "/soil/sandy_soil_1775016320859.png", desc: "Running this soil through my fingers, it feels very rough, loose, and granular. It has a light yellow-brown color. It falls apart instantly because it drains water extremely quickly and doesn't hold nutrients well." },
+  { id: "silt", name: "Silt Soil", image: "/soil/silt_soil_1775016335728.png", desc: "This silt soil feels incredibly fine and smooth to the touch, almost like flour or talcum powder. It has an earthy, uniform brown tone and holds moisture well, though you can easily compact it if you press hard." },
+  { id: "peat", name: "Peat Soil", image: "/soil/peat_soil_1775016349935.png", desc: "Squeezing this peat soil, I notice how dark, almost black, and spongy it feels. It's incredibly rich in organic matter and holds a lot of moisture, smelling deeply of damp earth." },
+  { id: "chalky", name: "Chalky Soil", image: "/soil/chalky_soil_1775016364929.png", desc: "This soil looks very pale and feels stony. You can clearly see the white limestone and chalk fragments mixed in. It feels dry and alkaline, and water seems to drain straight through it." }
 ]
 
 export default function OnboardingPage() {
@@ -37,17 +80,37 @@ export default function OnboardingPage() {
     location: "",
     coordinates: null as { lat: number; lng: number } | null,
     farmSize: "",
+    farmLength: "",
+    farmWidth: "",
+    requiresDimensions: false,
     budget: "",
     soilType: "",
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSearchingMap, setIsSearchingMap] = useState(false)
+  const [searchedLocation, setSearchedLocation] = useState<{lat: number; lng: number} | null>(null)
 
   // Chatbot State
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [chatInput, setChatInput] = useState("")
   const [isChatLoading, setIsChatLoading] = useState(false)
-  const [chatMessages, setChatMessages] = useState<{role: "user" | "bot", content: string, type: "text" | "image"}[]>([
+  const [chatMessages, setChatMessages] = useState<{role: "user" | "bot", content: string, type: "text" | "image", imageUrl?: string}[]>([
     { role: "bot", content: "Hi! I'm your Agritwin soil assistant. Describe your soil's texture, color, or behavior, or upload a photo to get help identifying it.", type: "text" }
   ])
+
+  // Helper to highlight soil type names in bot messages
+  const highlightSoilTypes = (text: string) => {
+    // First convert **bold** markdown to html
+    let result = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    const soilNames = ["Loamy Soil", "Clay Soil", "Sandy Soil", "Silt Soil", "Peat Soil", "Chalky Soil", "Loamy", "Clay", "Sandy", "Silt", "Peat", "Chalky", "Loam"]
+    // Sort by length descending so longer matches go first
+    const sorted = [...soilNames].sort((a, b) => b.length - a.length)
+    sorted.forEach(name => {
+      const regex = new RegExp(`(?!<[^>]*)(\\b${name}\\b)(?![^<]*>)`, 'gi')
+      result = result.replace(regex, `<span class="font-bold text-primary">$1</span>`)
+    })
+    return result
+  }
 
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,33 +121,62 @@ export default function OnboardingPage() {
     setChatMessages(prev => [...prev, { role: "user", content: userMessage, type: "text" }])
     setIsChatLoading(true)
 
-    // Simulate AI thinking and replying
-    setTimeout(() => {
-      const lower = userMessage.toLowerCase()
-      let reply = "Based on your description, it sounds like you might have Loamy soil. It's the most ideal for farming! If you check the soil reference (?) icon, you can see if the layers match your field."
-      
-      if (lower.includes("sticky") || lower.includes("hard")) {
-        reply = "That sticky and hard texture usually points to Clay soil. Clay holds water well but needs proper drainage."
-      } else if (lower.includes("sand") || lower.includes("loose") || lower.includes("drain")) {
-        reply = "Loose soil that drains fast is generally Sandy soil. It warms quickly but needs more watering."
-      } else if (lower.includes("dark") || lower.includes("rich")) {
-        reply = "Dark, rich soil is often Peat or highly organic Loam. Peat is great for retaining moisture."
-      } else if (lower.includes("white") || lower.includes("stone") || lower.includes("chalk")) {
-        reply = "Limestone fragments and lighter color typically indicate Chalky soil, which is very alkaline."
-      }
-
+    try {
+      const res = await fetch("/api/soil-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: userMessage }),
+      })
+      const data = await res.json()
+      const result = data.fallback || data
+      const reply = `I identified this as **${result.soilType}** (confidence: ${result.confidence}). ${result.explanation}`
       setChatMessages(prev => [...prev, { role: "bot", content: reply, type: "text" }])
-      setIsChatLoading(false)
-    }, 1500)
+    } catch {
+      // Fallback to keyword-based
+      const lower = userMessage.toLowerCase()
+      let reply = "Based on your description, it sounds like you might have Loamy Soil. It's the most ideal for farming!"
+      if (lower.includes("sticky") || lower.includes("hard")) {
+        reply = "That sticky and hard texture usually points to Clay Soil. Clay holds water well but needs proper drainage."
+      } else if (lower.includes("sand") || lower.includes("loose") || lower.includes("drain")) {
+        reply = "Loose soil that drains fast is generally Sandy Soil. It warms quickly but needs more watering."
+      } else if (lower.includes("dark") || lower.includes("rich")) {
+        reply = "Dark, rich soil is often Peat Soil or highly organic Loamy Soil. Peat is great for retaining moisture."
+      } else if (lower.includes("white") || lower.includes("stone") || lower.includes("chalk")) {
+        reply = "Limestone fragments and lighter color typically indicate Chalky Soil, which is very alkaline."
+      }
+      setChatMessages(prev => [...prev, { role: "bot", content: reply, type: "text" }])
+    }
+    setIsChatLoading(false)
   }
 
-  const handleMockImageUpload = () => {
-    setChatMessages(prev => [...prev, { role: "user", content: "Uploaded a photo of my soil.", type: "image" }])
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const imageUrl = URL.createObjectURL(file)
+    setChatMessages(prev => [...prev, { role: "user", content: file.name, type: "image", imageUrl }])
     setIsChatLoading(true)
-    setTimeout(() => {
-      setChatMessages(prev => [...prev, { role: "bot", content: "Looking at the distinct topsoil chunks and color, it appears highly organic. It looks like Loamy or Peat soil. I recommend selecting Loamy for your plan.", type: "text" }])
-      setIsChatLoading(false)
-    }, 2500)
+
+    try {
+      // Convert file to base64
+      const buffer = await file.arrayBuffer()
+      const base64 = btoa(
+        new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
+      )
+      const res = await fetch("/api/soil-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: base64, description: "Analyze this soil photo" }),
+      })
+      const data = await res.json()
+      const result = data.fallback || data
+      const reply = `I identified this as **${result.soilType}** (confidence: ${result.confidence}). ${result.explanation}`
+      setChatMessages(prev => [...prev, { role: "bot", content: reply, type: "text" }])
+    } catch {
+      setChatMessages(prev => [...prev, { role: "bot", content: "Looking at the distinct topsoil chunks and color, it appears highly organic. The crumbly texture and dark brown-orange hue suggest rich Loamy Soil composition. I recommend selecting Loamy Soil for your plan.", type: "text" }])
+    }
+    setIsChatLoading(false)
+    // Reset input so same file can be re-uploaded
+    e.target.value = ""
   }
 
   const handleNext = () => {
@@ -113,6 +205,9 @@ export default function OnboardingPage() {
       case 1:
         return formData.location.length > 0
       case 2:
+        if (formData.requiresDimensions) {
+          return formData.farmLength.length > 0 && formData.farmWidth.length > 0
+        }
         return formData.farmSize.length > 0
       case 3:
         return formData.budget.length > 0
@@ -134,7 +229,7 @@ export default function OnboardingPage() {
             <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center">
               <Leaf className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-lg text-foreground">AgriTwin AI</span>
+            <span className="font-semibold text-lg text-foreground">AgriFlow</span>
           </div>
           <p className="text-sm text-muted-foreground hidden sm:block">
             Intelligent Farming System
@@ -192,9 +287,9 @@ export default function OnboardingPage() {
             </div>
           </div>
 
-          <div className={`transition-all duration-500 ease-in-out ${currentStep === 4 ? "grid grid-cols-1 lg:grid-cols-5 gap-6" : ""}`}>
+          <div className={`transition-all duration-500 ease-in-out ${currentStep === 4 ? "grid grid-cols-1 lg:grid-cols-5 gap-6 items-start" : ""}`}>
             {/* Form Card */}
-            <Card className={`shadow-xl shadow-primary/5 border-border/50 flex flex-col ${currentStep === 4 ? "lg:col-span-3 h-[550px]" : ""}`}>
+            <Card className={`shadow-xl shadow-primary/5 border-border/50 ${currentStep === 4 ? "lg:col-span-3 h-fit" : ""}`}>
               <CardHeader className="pb-4 shrink-0">
               <CardTitle className="text-2xl">
                 {currentStep === 1 && "Where is your farm located?"}
@@ -209,21 +304,46 @@ export default function OnboardingPage() {
                 {currentStep === 4 && "Soil type affects crop selection and yield predictions"}
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6 flex-1 overflow-y-auto">
+            <CardContent className="space-y-6">
               {/* Step 1: Location */}
               {currentStep === 1 && (
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="location">Farm Location</Label>
-                    <div className="relative">
-                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="location"
-                        placeholder="e.g., Punjab, India or California, USA"
-                        value={formData.location}
-                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                        className="pl-10 h-12"
-                      />
+                    <div className="relative flex gap-2">
+                      <div className="relative flex-1">
+                        <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="location"
+                          placeholder="e.g., Punjab, India or California, USA"
+                          value={formData.location}
+                          onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                          className="pl-10 h-12"
+                        />
+                      </div>
+                      <Button 
+                        type="button" 
+                        variant="secondary"
+                        className="h-12 px-6"
+                        disabled={!formData.location || isSearchingMap}
+                        onClick={async () => {
+                          setIsSearchingMap(true)
+                          try {
+                            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formData.location)}`)
+                            const data = await res.json()
+                            if (data && data.length > 0) {
+                              const coords = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
+                              setSearchedLocation(coords)
+                              setFormData({ ...formData, coordinates: coords, location: data[0].display_name })
+                            }
+                          } catch (err) {
+                            console.error(err)
+                          }
+                          setIsSearchingMap(false)
+                        }}
+                      >
+                        {isSearchingMap ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search Map"}
+                      </Button>
                     </div>
                   </div>
                   <div className="space-y-2 pt-2">
@@ -240,6 +360,7 @@ export default function OnboardingPage() {
                            location: `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`
                          })
                        }}
+                       searchedLocation={searchedLocation}
                      />
                      {formData.coordinates && (
                        <p className="text-sm font-medium text-primary mt-2 flex items-center gap-1">
@@ -255,19 +376,82 @@ export default function OnboardingPage() {
               {currentStep === 2 && (
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="farmSize">Farm Size (in acres)</Label>
+                    <Label htmlFor="farmSize">Farm Size (sq meters)</Label>
                     <div className="relative">
                       <Ruler className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="farmSize"
-                        type="number"
-                        placeholder="e.g., 50"
+                        type="text"
+                        placeholder="e.g., 50 acres or 10 broom"
                         value={formData.farmSize}
-                        onChange={(e) => setFormData({ ...formData, farmSize: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          const isLikelyDescription = val.toLowerCase().includes("broom") || isNaN(Number(val))
+                          setFormData({ 
+                            ...formData, 
+                            farmSize: val, 
+                            requiresDimensions: val.length > 0 && isLikelyDescription 
+                          })
+                        }}
                         className="pl-10 h-12"
                       />
                     </div>
                   </div>
+                  {formData.requiresDimensions && (
+                    <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-4 animate-in fade-in slide-in-from-top-2">
+                      <p className="text-sm text-foreground/80">
+                        We detected a descriptive measurement. For accuracy, please provide the exact dimensions of your farm below.
+                      </p>
+                      <div className="flex gap-4">
+                        <div className="space-y-2 flex-1">
+                          <Label htmlFor="farmLength">Length (m)</Label>
+                          <Input
+                            id="farmLength"
+                            type="text"
+                            placeholder="e.g., 100"
+                            value={formData.farmLength}
+                            onChange={(e) => setFormData({ ...formData, farmLength: e.target.value })}
+                            className="h-11"
+                          />
+                          {formData.farmLength && extractDimension(formData.farmLength) > 0 && (
+                            <p className="text-xs text-muted-foreground pl-1">
+                              ≈ {extractDimension(formData.farmLength).toLocaleString()} m
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-2 flex-1">
+                          <Label htmlFor="farmWidth">Width (m)</Label>
+                          <Input
+                            id="farmWidth"
+                            type="text"
+                            placeholder="e.g., 50"
+                            value={formData.farmWidth}
+                            onChange={(e) => setFormData({ ...formData, farmWidth: e.target.value })}
+                            className="h-11"
+                          />
+                          {formData.farmWidth && extractDimension(formData.farmWidth) > 0 && (
+                            <p className="text-xs text-muted-foreground pl-1">
+                              ≈ {extractDimension(formData.farmWidth).toLocaleString()} m
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {(() => {
+                        if (formData.farmLength && formData.farmWidth) {
+                          const w = extractDimension(formData.farmWidth);
+                          const l = extractDimension(formData.farmLength);
+                          if (w > 0 && l > 0) {
+                            return (
+                              <p className="text-sm font-medium text-primary">
+                                Total Area: {w * l} sq meters
+                              </p>
+                            );
+                          }
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -293,7 +477,7 @@ export default function OnboardingPage() {
 
               {/* Step 4: Soil Type */}
               {currentStep === 4 && (
-                <div className="space-y-6">
+                <div className="space-y-4">
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Label htmlFor="soilType">Soil Type</Label>
@@ -303,13 +487,20 @@ export default function OnboardingPage() {
                             <HelpCircle className="h-4 w-4" />
                           </button>
                         </DialogTrigger>
-                        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto p-0 gap-0">
+                        <DialogContent className="sm:max-w-5xl w-[95vw] max-h-[85vh] overflow-y-auto p-0 gap-0">
                           <div className="sticky top-0 bg-card/95 backdrop-blur-sm z-10 px-6 py-4 border-b">
                             <DialogHeader>
-                              <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                                <FlaskConical className="h-5 w-5 text-primary" />
-                                Soil Type Reference Guide
-                              </DialogTitle>
+                              <div className="flex items-center justify-between">
+                                <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                                  <FlaskConical className="h-5 w-5 text-primary" />
+                                  Soil Type Reference Guide
+                                </DialogTitle>
+                                <DialogClose asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full border border-red-200 shrink-0 text-red-500 hover:text-red-600 hover:bg-red-50 transition-colors">
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </DialogClose>
+                              </div>
                               <DialogDescription>
                                 Review these layered 3D models to help identify your soil type. Look at the texture, color, and layer composition.
                               </DialogDescription>
@@ -360,7 +551,7 @@ export default function OnboardingPage() {
                 </div>
               )}
 
-              <div className="flex flex-col pt-4 mt-auto">
+              <div className="flex flex-col pt-4">
                 <div className="flex justify-between">
                   <Button
                     variant="outline"
@@ -434,10 +625,17 @@ export default function OnboardingPage() {
                           : "bg-muted text-foreground rounded-bl-none"
                       }`}>
                         {msg.type === "image" ? (
-                          <div className="flex items-center gap-2">
-                            <ImageIcon className="h-4 w-4" />
-                            <span>Image uploaded</span>
+                          <div className="space-y-2">
+                            {msg.imageUrl && (
+                              <img src={msg.imageUrl} alt="Uploaded soil" className="rounded-lg max-w-full max-h-40 object-cover" />
+                            )}
+                            <div className="flex items-center gap-2 text-xs opacity-80">
+                              <ImageIcon className="h-3 w-3" />
+                              <span>{msg.content}</span>
+                            </div>
                           </div>
+                        ) : msg.role === "bot" ? (
+                          <span dangerouslySetInnerHTML={{ __html: highlightSoilTypes(msg.content) }} />
                         ) : (
                           msg.content
                         )}
@@ -462,13 +660,20 @@ export default function OnboardingPage() {
                 
                 {/* Chat Input */}
                 <div className="p-3 border-t bg-card shrink-0">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
                   <form onSubmit={handleChatSubmit} className="flex items-center gap-2">
                     <Button 
                       type="button" 
                       variant="outline" 
                       size="icon" 
                       className="shrink-0 h-10 w-10 border-dashed"
-                      onClick={handleMockImageUpload}
+                      onClick={() => fileInputRef.current?.click()}
                       disabled={isChatLoading}
                       title="Upload photo"
                     >

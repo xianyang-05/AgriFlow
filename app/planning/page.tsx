@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   Leaf, ArrowRight, TrendingUp, TrendingDown, Cloud, Sun, 
   Droplets, ThermometerSun, AlertTriangle, CheckCircle2,
-  DollarSign, Wheat, Apple, Carrot, LayoutDashboard
+  DollarSign, Wheat, Apple, Carrot, LayoutDashboard, Send, Bot, User
 } from "lucide-react"
 import {
   LineChart,
@@ -109,6 +109,40 @@ export default function PlanningPage() {
   const [farmData, setFarmData] = useState<FarmData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
+  const [chatMessages, setChatMessages] = useState<{ role: "ai" | "user", content: string }[]>([
+    { role: "ai", content: "Hello! I am your AgriFlow Assistant. How can I help you choose the best crop and plan for your farm?" }
+  ])
+  const [chatInput, setChatInput] = useState("")
+  const [isChatLoading, setIsChatLoading] = useState(false)
+  const chatEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [chatMessages])
+
+  const handleChatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!chatInput.trim()) return
+
+    const userMsg = chatInput
+    setChatInput("")
+    setChatMessages(prev => [...prev, { role: "user", content: userMsg }])
+    setIsChatLoading(true)
+
+    try {
+      const res = await fetch("/api/plan-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userMsg, chatHistory: chatMessages }),
+      })
+      const data = await res.json()
+      setChatMessages(prev => [...prev, { role: "ai", content: data.reply }])
+    } catch {
+      setChatMessages(prev => [...prev, { role: "ai", content: "Sorry, I am having network issues right now." }])
+    }
+    setIsChatLoading(false)
+  }
+
   useEffect(() => {
     const stored = localStorage.getItem("farmData")
     if (stored) {
@@ -153,7 +187,7 @@ export default function PlanningPage() {
             <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center">
               <Leaf className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-lg text-foreground">AgriTwin AI</span>
+            <span className="font-semibold text-lg text-foreground">AgriFlow</span>
           </Link>
           <Button onClick={() => router.push("/dashboard")} className="gap-2">
             <LayoutDashboard className="h-4 w-4" />
@@ -200,20 +234,19 @@ export default function PlanningPage() {
                             : "border-border hover:border-primary/50 hover:bg-muted/50"
                         }`}
                       >
-                        <div className="flex items-start justify-between mb-3">
-                          <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${
-                            isSelected ? "bg-primary text-primary-foreground" : "bg-muted"
-                          }`}>
-                            <Icon className="h-5 w-5" />
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${
+                              isSelected ? "bg-primary text-primary-foreground" : "bg-muted"
+                            }`}>
+                              <Icon className="h-5 w-5" />
+                            </div>
+                            <h3 className="font-semibold text-foreground text-lg">{crop.name}</h3>
                           </div>
                           <Badge className={getRiskColor(crop.risk)}>
                             {crop.risk} risk
                           </Badge>
                         </div>
-                        <h3 className="font-semibold text-foreground">{crop.name}</h3>
-                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                          {crop.description}
-                        </p>
                         <div className="grid grid-cols-2 gap-2 mt-4">
                           <div>
                             <p className="text-xs text-muted-foreground">Yield</p>
@@ -243,13 +276,12 @@ export default function PlanningPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="profit" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3 mb-4">
-                    <TabsTrigger value="profit">Profit</TabsTrigger>
-                    <TabsTrigger value="yield">Yield</TabsTrigger>
-                    <TabsTrigger value="risk">Risk</TabsTrigger>
+                <Tabs defaultValue="market" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 mb-4">
+                    <TabsTrigger value="market">Market Trend (Price)</TabsTrigger>
+                    <TabsTrigger value="risk">Risk Analysis</TabsTrigger>
                   </TabsList>
-                  <TabsContent value="profit" className="space-y-4">
+                  <TabsContent value="market" className="space-y-4">
                     <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={marketData}>
@@ -281,16 +313,16 @@ export default function PlanningPage() {
                     </div>
                     <div className="grid grid-cols-3 gap-4">
                       <div className="p-4 rounded-xl bg-muted/50">
-                        <p className="text-xs text-muted-foreground">Best Case</p>
-                        <p className="text-lg font-semibold text-primary">$5,200</p>
+                        <p className="text-xs text-muted-foreground">Highest Price</p>
+                        <p className="text-lg font-semibold text-primary">$520/ton</p>
                       </div>
                       <div className="p-4 rounded-xl bg-muted/50">
-                        <p className="text-xs text-muted-foreground">Expected</p>
-                        <p className="text-lg font-semibold text-foreground">{selectedCropData?.profit}</p>
+                        <p className="text-xs text-muted-foreground">Current Avg</p>
+                        <p className="text-lg font-semibold text-foreground">$380/ton</p>
                       </div>
                       <div className="p-4 rounded-xl bg-muted/50">
-                        <p className="text-xs text-muted-foreground">Worst Case</p>
-                        <p className="text-lg font-semibold text-muted-foreground">$1,800</p>
+                        <p className="text-xs text-muted-foreground">Lowest Price</p>
+                        <p className="text-lg font-semibold text-muted-foreground">$240/ton</p>
                       </div>
                     </div>
                   </TabsContent>
@@ -377,58 +409,18 @@ export default function PlanningPage() {
             </Card>
           </div>
 
-          {/* Right Column - Climate & Market */}
-          <div className="space-y-6">
-            {/* Climate Summary */}
-            <Card className="shadow-lg shadow-primary/5">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Cloud className="h-5 w-5 text-primary" />
-                  Climate Summary
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-xl bg-muted/50">
-                    <div className="flex items-center gap-2 mb-1">
-                      <ThermometerSun className="h-4 w-4 text-warning" />
-                      <span className="text-xs text-muted-foreground">Temp</span>
-                    </div>
-                    <p className="font-semibold text-foreground">{climateData.temperature}</p>
+          {/* Right Column - AI Chatbot Planner */}
+          <div className="space-y-6 flex flex-col h-[800px] sticky top-24">
+            <Card className="shadow-lg shadow-primary/5 flex-1 flex flex-col overflow-hidden border-border/50">
+              <div className="bg-primary p-4 text-primary-foreground flex items-center gap-3 shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center text-xl">
+                    <Bot className="w-5 h-5" />
                   </div>
-                  <div className="p-3 rounded-xl bg-muted/50">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Droplets className="h-4 w-4 text-info" />
-                      <span className="text-xs text-muted-foreground">Humidity</span>
-                    </div>
-                    <p className="font-semibold text-foreground">{climateData.humidity}</p>
+                  <div>
+                    <h3 className="font-bold">AgriFlow Planner</h3>
+                    <p className="text-xs text-primary-foreground/80 cursor-default">Ready to answer your questions</p>
                   </div>
-                  <div className="p-3 rounded-xl bg-muted/50">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Cloud className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">Rainfall</span>
-                    </div>
-                    <p className="font-semibold text-foreground">{climateData.rainfall}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-muted/50">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Sun className="h-4 w-4 text-warning" />
-                      <span className="text-xs text-muted-foreground">Forecast</span>
-                    </div>
-                    <p className="font-semibold text-primary">{climateData.forecast}</p>
-                  </div>
-                </div>
-                <div className="p-3 rounded-xl bg-primary/5 border border-primary/20">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium text-foreground">Optimal Conditions</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Current climate is favorable for {selectedCropData?.name} cultivation.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
 
             {/* Market Insight */}
             <Card className="shadow-lg shadow-primary/5">

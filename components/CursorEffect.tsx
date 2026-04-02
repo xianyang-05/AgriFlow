@@ -57,7 +57,7 @@ export default function CursorEffect() {
       <img 
         src="/paddy.png" 
         alt="cursor"
-        className="fixed w-6 h-6 object-contain drop-shadow-md"
+        className="fixed w-8 h-8 object-contain drop-shadow-md"
         style={{
           left: cursorPos.x,
           top: cursorPos.y,
