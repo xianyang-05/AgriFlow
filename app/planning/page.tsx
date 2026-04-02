@@ -24,13 +24,22 @@ import {
   Area,
 } from "recharts"
 
+const TomatoIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 3c0 0-2-1-4 0s-2 3-2 3" />
+    <path d="M16 6c-2-1-4 0-4 0" />
+    <circle cx="12" cy="14" r="7" />
+    <path d="M12 7v3" />
+  </svg>
+)
+
 const marketData = [
-  { month: "Jan", wheat: 280, rice: 320, corn: 180, vegetables: 420 },
-  { month: "Feb", wheat: 300, rice: 310, corn: 190, vegetables: 400 },
-  { month: "Mar", wheat: 290, rice: 340, corn: 200, vegetables: 450 },
-  { month: "Apr", wheat: 320, rice: 350, corn: 220, vegetables: 480 },
-  { month: "May", wheat: 340, rice: 380, corn: 240, vegetables: 520 },
-  { month: "Jun", wheat: 360, rice: 400, corn: 260, vegetables: 550 },
+  { month: "Jan", wheat: 280, tomato: 320, corn: 180, vegetables: 420 },
+  { month: "Feb", wheat: 300, tomato: 310, corn: 190, vegetables: 400 },
+  { month: "Mar", wheat: 290, tomato: 340, corn: 200, vegetables: 450 },
+  { month: "Apr", wheat: 320, tomato: 350, corn: 220, vegetables: 480 },
+  { month: "May", wheat: 340, tomato: 380, corn: 240, vegetables: 520 },
+  { month: "Jun", wheat: 360, tomato: 400, corn: 260, vegetables: 550 },
 ]
 
 const cropRecommendations = [
@@ -46,9 +55,9 @@ const cropRecommendations = [
     description: "Ideal for your soil type with stable market demand",
   },
   {
-    id: "rice",
-    name: "Rice",
-    icon: Leaf,
+    id: "tomato",
+    name: "Tomato",
+    icon: TomatoIcon,
     yield: "3.8 tons/acre",
     risk: "medium",
     profit: "$3,200",
@@ -262,7 +271,7 @@ export default function PlanningPage() {
                           />
                           <Area
                             type="monotone"
-                            dataKey={selectedCrop === "vegetables" ? "vegetables" : selectedCrop === "rice" ? "rice" : "wheat"}
+                            dataKey={selectedCrop === "vegetables" ? "vegetables" : selectedCrop === "tomato" ? "tomato" : "wheat"}
                             stroke="var(--color-primary)"
                             fill="url(#profitGradient)"
                             strokeWidth={2}
@@ -301,7 +310,7 @@ export default function PlanningPage() {
                           />
                           <Line
                             type="monotone"
-                            dataKey={selectedCrop === "vegetables" ? "vegetables" : selectedCrop === "rice" ? "rice" : "wheat"}
+                            dataKey={selectedCrop === "vegetables" ? "vegetables" : selectedCrop === "tomato" ? "tomato" : "wheat"}
                             stroke="var(--color-chart-2)"
                             strokeWidth={2}
                             dot={{ fill: "var(--color-chart-2)" }}
@@ -454,7 +463,7 @@ export default function PlanningPage() {
                       />
                       <Line
                         type="monotone"
-                        dataKey="rice"
+                        dataKey="tomato"
                         stroke="var(--color-chart-2)"
                         strokeWidth={2}
                         dot={false}
@@ -476,7 +485,7 @@ export default function PlanningPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="h-3 w-3 rounded-full bg-chart-2" />
-                    <span className="text-xs text-muted-foreground">Rice</span>
+                    <span className="text-xs text-muted-foreground">Tomato</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="h-3 w-3 rounded-full bg-chart-3" />

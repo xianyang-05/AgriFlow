@@ -12,8 +12,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import {
   Leaf, AlertTriangle, Droplets, CheckCircle2, DollarSign,
-  Info, ArrowLeft, Send, Sparkles, Youtube, BookOpen, Clock, AlertCircle, RefreshCw, TrendingUp
+  Info, ArrowLeft, Send, Sparkles, Youtube, BookOpen, Clock, AlertCircle, RefreshCw, TrendingUp, ChevronLeft, ChevronRight
 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 // Types
 interface Phase {
@@ -28,73 +33,99 @@ interface Phase {
   risk: string
   completed: boolean
   bgColor: string
+  videoSrc: string
 }
 
 const mockPhases: Phase[] = [
   {
     id: "prep",
-    title: "Preparation Phase",
+    title: "Soil & Seedbed Preparation",
     emoji: "🚜",
     image: "/preparation.png",
-    duration: "Day 1 - Day 5",
-    focus: ["Plow the field to a depth of 20cm", "Test soil pH levels", "Apply base organic compost"],
-    water: "Moisten soil lightly",
-    fertilizer: "Apply 50kg/hectare organic matter",
-    risk: "Compacted soil if plowed when too wet",
+    duration: "Day 1 - Day 10",
+    focus: [
+      "Prepare raised beds 15–20cm high for drainage",
+      "Test soil pH (ideal: 6.0–6.8) and amend with lime if acidic",
+      "Mix in aged compost and well-rotted manure at 5kg/m²",
+    ],
+    water: "Pre-soak beds to field capacity before transplanting",
+    fertilizer: "Basal application: 200kg/ha NPK 15-15-15 + organic compost",
+    risk: "Waterlogged soil promotes Fusarium wilt — ensure good drainage",
     completed: true,
     bgColor: "bg-[#f5f5dc]",
+    videoSrc: "/1part.mp4",
   },
   {
     id: "plant",
-    title: "Planting Phase",
+    title: "Transplanting & Establishment",
     emoji: "🌱",
     image: "/planting.png",
-    duration: "Day 6 - Day 10",
-    focus: ["Ensure 15cm spacing between seedlings", "Plant at 3cm depth", "Apply starter fertilizer"],
-    water: "1L per plant immediately after planting",
-    fertilizer: "NPK 10-20-10 starter dose",
-    risk: "Seedling shock if planted during midday heat",
+    duration: "Day 11 - Day 20",
+    focus: [
+      "Transplant 4–6 week old seedlings at 60cm × 45cm spacing",
+      "Install bamboo stakes or trellis supports at planting time",
+      "Apply mulch (straw or black plastic) around base to retain moisture",
+    ],
+    water: "500ml per plant immediately, then daily for first week",
+    fertilizer: "Starter solution: diluted fish emulsion or NPK 10-20-10",
+    risk: "Transplant shock if planted in midday heat — plant in evening or cloudy days",
     completed: false,
     bgColor: "bg-[#eff3e0]",
+    videoSrc: "/2part.mp4",
   },
   {
     id: "water",
-    title: "Vegetative Growth",
+    title: "Vegetative Growth & Staking",
     emoji: "💧",
     image: "/vegetative.png",
-    duration: "Day 11 - Day 40",
-    focus: ["Monitor for early weed emergence", "Regular deep watering", "Second fertilizer application"],
-    water: "2.5L per plant every 2 days",
-    fertilizer: "Nitrogen-rich top dressing (Urea)",
-    risk: "Overwatering may cause root rot. Watch for aphids.",
+    duration: "Day 21 - Day 45",
+    focus: [
+      "Prune suckers (side shoots) below first flower cluster",
+      "Tie stems to stakes as plants grow — check weekly",
+      "Scout for early pests: whiteflies, leaf miners, and aphids",
+    ],
+    water: "2–3L per plant every 2 days via drip irrigation (avoid wetting leaves)",
+    fertilizer: "Side-dress with calcium ammonium nitrate (CAN) at 100kg/ha",
+    risk: "Overhead watering spreads early blight and bacterial spot",
     completed: false,
     bgColor: "bg-[#f4f2ed]",
+    videoSrc: "/3part.mp4",
   },
   {
     id: "flower",
-    title: "Flowering & Fruiting",
-    emoji: "🌿",
+    title: "Flowering & Fruit Set",
+    emoji: "🍅",
     image: "/vegetative.png",
-    duration: "Day 41 - Day 75",
-    focus: ["Encourage pollination", "Prevent water stress", "Apply potassium-rich feed"],
-    water: "3L per plant daily (critical phase)",
-    fertilizer: "High potassium mix to boost yield",
-    risk: "Water stress here severely impacts final yield.",
+    duration: "Day 46 - Day 80",
+    focus: [
+      "Gently shake plants or tap flowers to aid pollination",
+      "Apply calcium spray (CaCl₂) to prevent blossom end rot",
+      "Monitor for tomato hornworm and late blight — spray if needed",
+    ],
+    water: "3–4L per plant daily — consistent watering is critical to prevent fruit cracking",
+    fertilizer: "Switch to high-potassium feed (NPK 5-10-20) every 2 weeks",
+    risk: "Irregular watering causes blossom end rot and fruit cracking",
     completed: false,
     bgColor: "bg-[#f4f2ed]",
+    videoSrc: "/4part.mp4",
   },
   {
     id: "harvest",
-    title: "Harvest Phase",
-    emoji: "🌾",
+    title: "Ripening & Harvest",
+    emoji: "🍅",
     image: "/harvest.png",
-    duration: "Day 76 - Day 90",
-    focus: ["Check crop maturity daily", "Cease watering 3 days before", "Prepare storage containers"],
-    water: "Stop watering to enhance flavor/dryness",
-    fertilizer: "None",
-    risk: "Delaying harvest can lead to crop rot or pest damage.",
+    duration: "Day 81 - Day 120",
+    focus: [
+      "Harvest when fruits show full color (red/orange) or at breaker stage",
+      "Pick every 2–3 days to encourage further fruiting",
+      "Sort by size and ripeness — store at 12–15°C, never refrigerate unripe",
+    ],
+    water: "Reduce to 1.5L per plant every 2 days",
+    fertilizer: "Stop fertilizer application 2 weeks before final harvest",
+    risk: "Over-ripe fruits attract fruit flies and are prone to sun scald",
     completed: false,
     bgColor: "bg-[#fff6e5]",
+    videoSrc: "/5part.mp4",
   }
 ]
 
@@ -105,12 +136,13 @@ export default function ExecutionPlanPage() {
 
   const [viewMode, setViewMode] = useState<"timeline" | "tasks">("timeline")
   const [metrics, setMetrics] = useState({
-    duration: "90 days",
-    profit: 2800,
-    yield: 4.2,
-    risk: "Low"
+    duration: "120 days",
+    profit: 3200,
+    yield: 3.8,
+    risk: "Medium"
   })
   const [activeGuide, setActiveGuide] = useState<string | null>(null)
+  const [activeVideoIndex, setActiveVideoIndex] = useState<number | null>(null)
 
   const [chatMessages, setChatMessages] = useState<{ role: "ai" | "user", text: string }[]>([
     { role: "ai", text: `Hello! I'm your AgriFlow AI. I see we're planning for ${crop === "vegetables" ? "Mixed Vegetables" : crop}. How can I assist you with this execution plan today?` }
@@ -161,7 +193,7 @@ export default function ExecutionPlanPage() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <h1 className="text-2xl font-bold text-[#3e2723] capitalize flex items-center gap-2">
-              🌾 {crop === "vegetables" ? "Mixed Vegetables" : crop} Plan
+              🍅 {crop === "vegetables" ? "Mixed Vegetables" : crop} Plan
             </h1>
           </div>
         </div>
@@ -328,7 +360,12 @@ export default function ExecutionPlanPage() {
 
                           <div className="pt-2">
                             <div className="flex flex-wrap items-center gap-3">
-                              <Button size="sm" variant="outline" className="rounded-full border-[#8D6E63] text-[#8D6E63] hover:bg-[#F5F5DC]">
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                className="rounded-full border-[#8D6E63] text-[#8D6E63] hover:bg-[#F5F5DC]"
+                                onClick={() => setActiveVideoIndex(idx)}
+                              >
                                 <Youtube className="w-4 h-4 mr-1.5" /> Watch Tutorial
                               </Button>
                               <Button
@@ -498,6 +535,51 @@ export default function ExecutionPlanPage() {
           </aside>
 
         </div>
+
+        <Dialog open={activeVideoIndex !== null} onOpenChange={(open) => !open && setActiveVideoIndex(null)}>
+          <DialogContent className="sm:max-w-[70vw] w-[70vw] p-0 overflow-hidden bg-black border-none rounded-xl shadow-2xl flex flex-col">
+            <DialogTitle className="sr-only">Video Tutorial</DialogTitle>
+            {activeVideoIndex !== null && (
+              <>
+                <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/80 to-transparent z-10 flex justify-center pointer-events-none">
+                  <h3 className="text-white font-bold text-lg pointer-events-auto">
+                    {mockPhases[activeVideoIndex].title}
+                  </h3>
+                </div>
+                <video 
+                  key={mockPhases[activeVideoIndex].videoSrc}
+                  src={mockPhases[activeVideoIndex].videoSrc} 
+                  controls 
+                  autoPlay 
+                  className="w-full h-auto max-h-[85vh] rounded-xl object-contain bg-black"
+                />
+                
+                {/* Navigation Buttons */}
+                {activeVideoIndex > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-black/50 border border-white/20 text-white hover:bg-black/80 hover:text-white transition-all z-20"
+                    onClick={() => setActiveVideoIndex(activeVideoIndex - 1)}
+                  >
+                    <ChevronLeft className="w-8 h-8" />
+                  </Button>
+                )}
+                
+                {activeVideoIndex < mockPhases.length - 1 && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-black/50 border border-white/20 text-white hover:bg-black/80 hover:text-white transition-all z-20"
+                    onClick={() => setActiveVideoIndex(activeVideoIndex + 1)}
+                  >
+                    <ChevronRight className="w-8 h-8" />
+                  </Button>
+                )}
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   )
