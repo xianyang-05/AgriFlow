@@ -21,6 +21,14 @@ export interface NormalizedFarmInput {
   soil_type?: string | null
 }
 
+export interface UserPreferences {
+  preferred_crops: string[]
+  excluded_crops: string[]
+  risk_preference?: string | null
+  harvest_preference?: string | null
+  notes?: string | null
+}
+
 export interface PriceResult {
   crop_id: string
   predicted_price: number
@@ -67,11 +75,25 @@ export interface RecommendationResponse {
   run_id: string | null
   version_number?: number | null
   normalized_input?: NormalizedFarmInput | null
+  user_preferences?: UserPreferences
   ranked_crops: RankedCrop[]
   eliminated_crops: EliminationReason[]
   aggressive_plan?: CropPlan | null
   conservative_plan?: CropPlan | null
   explanation: string
+}
+
+export interface RecommendationChatResponse {
+  run_id: string
+  intent: "question" | "modification" | "revert"
+  confidence: number
+  assistant_message: string
+  updated_recommendation: RecommendationResponse | null
+  has_previous_version: boolean
+  status: RecommendationResponse["status"]
+  clarification_needed: boolean
+  clarification_questions: string[]
+  warnings: string[]
 }
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(/\/+$/, "")
@@ -156,6 +178,16 @@ export async function createRecommendation(payload: RecommendationCreatePayload)
 export async function getRecommendation(runId: string) {
   return request<RecommendationResponse>(`/api/v1/recommendations/${runId}`, {
     method: "GET",
+  })
+}
+
+export async function sendRecommendationChatMessage(runId: string, message: string) {
+  return request<RecommendationChatResponse>("/api/v1/chat", {
+    method: "POST",
+    body: JSON.stringify({
+      run_id: runId,
+      message,
+    }),
   })
 }
 

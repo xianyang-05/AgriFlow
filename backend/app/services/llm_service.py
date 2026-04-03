@@ -5,6 +5,7 @@ import httpx
 
 from app.config import get_settings
 from app.exceptions import LLMError
+from app.logging_config import get_logger
 from app.schemas.chat import ChatUpdatePayload, IntentClassification
 from app.schemas.decision import ExplanationInput
 from app.schemas.input import RawInput
@@ -13,6 +14,40 @@ from app.schemas.input import RawInput
 class LLMService:
     def __init__(self) -> None:
         self.settings = get_settings()
+        self._chat_endpoint_available: bool | None = None
+        self.logger = get_logger().bind(
+            service="ollama",
+            ollama_base_url=self.settings.ollama_base_url,
+            ollama_model=self.settings.ollama_model,
+        )
+
+    def _generate(self, system_prompt: str, user_prompt: str, *, json_mode: bool = False) -> str:
+        prompt = f"System: {system_prompt}\nUser: {user_prompt}\nAssistant:"
+        payload: dict[str, Any] = {
+            "model": self.settings.ollama_model,
+            "prompt": prompt,
+            "stream": False,
+        }
+        if json_mode:
+            payload["format"] = "json"
+
+        try:
+            with httpx.Client(timeout=self.settings.request_timeout_seconds) as client:
+                response = client.post(f"{self.settings.ollama_base_url}/api/generate", json=payload)
+                response.raise_for_status()
+        except httpx.HTTPError as exc:
+            self._log_http_error(
+                "ollama.generate.failed",
+                exc,
+                endpoint="/api/generate",
+            )
+            raise LLMError("Ollama request failed") from exc
+
+        data = response.json()
+        try:
+            return str(data["response"])
+        except (KeyError, TypeError) as exc:
+            raise LLMError("Ollama response missing content") from exc
 
     def _extract_json(self, text: str) -> dict[str, Any]:
         try:
@@ -28,6 +63,9 @@ class LLMService:
                 raise LLMError("LLM did not return valid JSON") from exc
 
     def _chat(self, system_prompt: str, user_prompt: str, *, json_mode: bool = False) -> str:
+        if self._chat_endpoint_available is False:
+            return self._generate(system_prompt, user_prompt, json_mode=json_mode)
+
         payload: dict[str, Any] = {
             "model": self.settings.ollama_model,
             "messages": [
@@ -42,8 +80,23 @@ class LLMService:
         try:
             with httpx.Client(timeout=self.settings.request_timeout_seconds) as client:
                 response = client.post(f"{self.settings.ollama_base_url}/api/chat", json=payload)
+                if response.status_code == 404:
+                    self._chat_endpoint_available = False
+                    self.logger.warning(
+                        "ollama.chat_endpoint_unavailable",
+                        endpoint="/api/chat",
+                        fallback_endpoint="/api/generate",
+                        status_code=response.status_code,
+                    )
+                    return self._generate(system_prompt, user_prompt, json_mode=json_mode)
                 response.raise_for_status()
+                self._chat_endpoint_available = True
         except httpx.HTTPError as exc:
+            self._log_http_error(
+                "ollama.chat.failed",
+                exc,
+                endpoint="/api/chat",
+            )
             raise LLMError("Ollama request failed") from exc
 
         data = response.json()
@@ -75,10 +128,52 @@ class LLMService:
         context: dict[str, Any],
     ) -> IntentClassification:
         system_prompt = (
-            "Classify the message intent as question, modification, or revert. "
-            "Return JSON with keys intent, confidence, updates. "
+            "You classify the user's latest message about an existing crop recommendation. "
+            "Return strict JSON with keys: intent, confidence, updates. "
+            "intent must be exactly one of: question, modification, revert. "
+            "Only use revert when the user explicitly asks to undo, revert, roll back, or restore a previous version. "
+            "If the user asks to remove, exclude, avoid, replace, or stop recommending a crop, that is modification, not revert. "
             "updates may contain: budget_myr, area_m2, target_month, forecast_horizon_months, soil_type, "
-            "preferred_crops, excluded_crops, risk_preference, harvest_preference, notes."
+            "preferred_crops, excluded_crops, risk_preference, harvest_preference, notes. "
+            "Use crop ids from context when available. "
+            "If the message is a question about the current plan, use question with empty updates. "
+            "If the message changes the plan, use modification and extract structured updates when possible. "
+            "Examples: "
+            "message='Why was chili selected?' -> {\"intent\":\"question\",\"confidence\":0.95,\"updates\":{}}. "
+            "message='I don't want chili. Remove chili from the recommendations.' -> "
+            "{\"intent\":\"modification\",\"confidence\":0.95,\"updates\":{\"excluded_crops\":[\"chili\"]}}. "
+            "message='Prefer lower-risk crops and a faster harvest.' -> "
+            "{\"intent\":\"modification\",\"confidence\":0.9,\"updates\":{\"risk_preference\":\"low\",\"harvest_preference\":\"fast\"}}. "
+            "message='Undo the last change and go back to the previous version.' -> "
+            "{\"intent\":\"revert\",\"confidence\":0.98,\"updates\":{}}. "
+            "If you are unsure, lower confidence instead of guessing."
+        )
+        user_prompt = json.dumps({"message": message, "history": history, "context": context})
+        payload = self._extract_json(self._chat(system_prompt, user_prompt, json_mode=True))
+        payload["updates"] = ChatUpdatePayload(**payload.get("updates", {}))
+        return IntentClassification(**payload)
+
+    def disambiguate_revert_intent(
+        self,
+        message: str,
+        history: list[dict[str, str]],
+        context: dict[str, Any],
+    ) -> IntentClassification:
+        system_prompt = (
+            "You are resolving an ambiguous revert classification for a crop-planning assistant. "
+            "Return strict JSON with keys: intent, confidence, updates. "
+            "intent must be exactly one of: modification or revert. "
+            "Use revert only if the user is explicitly asking to restore, undo, roll back, or go back to a previous saved recommendation version. "
+            "If the user is asking to remove a crop, exclude a crop, stop recommending a crop, change risk, budget, harvest speed, soil type, area, month, or any current plan setting, that is modification. "
+            "If the user says things like 'remove chili', 'don't recommend chili', or 'exclude chili', return modification with excluded_crops set. "
+            "updates may contain: budget_myr, area_m2, target_month, forecast_horizon_months, soil_type, "
+            "preferred_crops, excluded_crops, risk_preference, harvest_preference, notes. "
+            "Use crop ids from context when available. "
+            "Examples: "
+            "message='Undo the last change and restore the previous version.' -> "
+            "{\"intent\":\"revert\",\"confidence\":0.98,\"updates\":{}}. "
+            "message='Remove chili from the recommended crops.' -> "
+            "{\"intent\":\"modification\",\"confidence\":0.96,\"updates\":{\"excluded_crops\":[\"chili\"]}}."
         )
         user_prompt = json.dumps({"message": message, "history": history, "context": context})
         payload = self._extract_json(self._chat(system_prompt, user_prompt, json_mode=True))
@@ -103,5 +198,30 @@ class LLMService:
                 response = client.get(f"{self.settings.ollama_base_url}/api/tags")
                 response.raise_for_status()
             return {"status": "healthy"}
-        except httpx.HTTPError:
+        except httpx.HTTPError as exc:
+            self._log_http_error(
+                "ollama.healthcheck.failed",
+                exc,
+                endpoint="/api/tags",
+                level="warning",
+            )
             return {"status": "unreachable"}
+
+    def _log_http_error(
+        self,
+        event: str,
+        exc: httpx.HTTPError,
+        *,
+        endpoint: str,
+        level: str = "error",
+    ) -> None:
+        response = getattr(exc, "response", None)
+        request = getattr(exc, "request", None)
+        log_method = self.logger.warning if level == "warning" else self.logger.error
+        log_method(
+            event,
+            endpoint=endpoint,
+            status_code=response.status_code if response is not None else None,
+            request_method=request.method if request is not None else None,
+            error=str(exc),
+        )

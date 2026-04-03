@@ -1,17 +1,30 @@
 ﻿"use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  Leaf, ArrowRight, TrendingUp, TrendingDown, Cloud, Sun, 
-  Droplets, ThermometerSun, AlertTriangle, CheckCircle2,
-  DollarSign, Wheat, Apple, Carrot, LayoutDashboard, AlertCircle
+import { Input } from "@/components/ui/input"
+import {
+  Leaf,
+  ArrowRight,
+  TrendingUp,
+  TrendingDown,
+  Droplets,
+  ThermometerSun,
+  AlertTriangle,
+  CheckCircle2,
+  Wheat,
+  Apple,
+  Carrot,
+  LayoutDashboard,
+  AlertCircle,
+  Bot,
+  User,
+  Send,
 } from "lucide-react"
 import {
   LineChart,
@@ -29,6 +42,7 @@ import {
   getRecommendation,
   getRecommendationErrorMessage,
   getStoredRecommendationPlan,
+  sendRecommendationChatMessage,
   type RankedCrop,
   type RecommendationResponse,
   saveRecommendationPlan,
@@ -46,7 +60,6 @@ const marketData = [
 type CropIcon = typeof Wheat
 
 type StrategyKey = "aggressive" | "conservative"
-type ScoreTone = "low" | "medium" | "high"
 
 interface StrategyRecommendationCard {
   strategy: StrategyKey
@@ -54,21 +67,10 @@ interface StrategyRecommendationCard {
   cropId: string
   cropName: string
   icon: CropIcon
-  badgeTone: ScoreTone
-  badgeLabel: string
   price: string
   growthCycle: string
-  metricLabel: string
-  overallScore: string
   rationale: string
   explanationPoints: string[]
-}
-
-const climateData = {
-  temperature: "28°C",
-  humidity: "65%",
-  rainfall: "850mm/year",
-  forecast: "Favorable",
 }
 
 function formatCurrency(value: number) {
@@ -93,26 +95,6 @@ function getCropIcon(cropId: string, cropName: string): CropIcon {
   }
 
   return Leaf
-}
-
-function getRewardTone(score: number): ScoreTone {
-  if (score >= 0.75) {
-    return "high"
-  }
-  if (score >= 0.55) {
-    return "medium"
-  }
-  return "low"
-}
-
-function getRiskTone(score: number): ScoreTone {
-  if (score <= 0.25) {
-    return "low"
-  }
-  if (score <= 0.45) {
-    return "medium"
-  }
-  return "high"
 }
 
 function getRewardScore(crop: RankedCrop) {
@@ -166,8 +148,30 @@ const STRATEGY_WEIGHTS: Record<StrategyKey, Record<keyof RankedCrop["score_break
   },
 }
 
-function formatPercent(value: number) {
-  return `${Math.round(value * 100)}%`
+function describeScore(value: number) {
+  if (value >= 0.85) {
+    return "excellent"
+  }
+  if (value >= 0.65) {
+    return "strong"
+  }
+  if (value >= 0.45) {
+    return "solid"
+  }
+  if (value >= 0.25) {
+    return "limited"
+  }
+  return "weak"
+}
+
+function describeWeight(value: number) {
+  if (value >= 0.3) {
+    return "a major factor"
+  }
+  if (value >= 0.15) {
+    return "an important factor"
+  }
+  return "a smaller factor"
 }
 
 function buildMetricExplanation(
@@ -176,34 +180,34 @@ function buildMetricExplanation(
   score: number,
   weight: number,
 ) {
-  const scoreText = formatPercent(score)
-  const weightText = formatPercent(weight)
+  const scoreText = describeScore(score)
+  const weightText = describeWeight(weight)
 
   switch (metric) {
     case "climate_score":
       return strategy === "aggressive"
-        ? `Weather stability scored ${scoreText} and carries ${weightText} of the reward formula, so forecast fit still added meaningful upside.`
-        : `Weather stability scored ${scoreText} and carries ${weightText} of the risk formula, making forecast reliability one of the biggest reasons this crop stayed low-risk.`
+        ? `Weather stability looked ${scoreText} and remained ${weightText} in the reward formula, so forecast fit still added meaningful upside.`
+        : `Weather stability looked ${scoreText} and remained ${weightText} in the risk formula, making forecast reliability one of the biggest reasons this crop stayed safer.`
     case "duration_fit_score":
       return strategy === "aggressive"
-        ? `Harvest speed scored ${scoreText} and carries ${weightText}, making crop duration one of the biggest reward drivers.`
-        : `Crop duration scored ${scoreText}; it only carries ${weightText} of the risk formula, so it mattered less than climate and baseline fit.`
+        ? `Harvest speed looked ${scoreText} and was ${weightText}, making crop duration one of the main reward drivers.`
+        : `Crop duration looked ${scoreText}; it was only ${weightText} in the risk formula, so it mattered less than climate and baseline fit.`
     case "price_score":
       return strategy === "aggressive"
-        ? `Market price scored ${scoreText}. Price only carries ${weightText}, but stronger upside still helped this crop win on reward.`
-        : `Market price scored ${scoreText}. It carries a modest ${weightText} in the risk formula, so it acted as a minor risk reducer rather than the main driver.`
+        ? `Market price looked ${scoreText}. Price was only ${weightText}, but the upside still helped this crop win on reward.`
+        : `Market price looked ${scoreText}. It counted as ${weightText} in the risk formula, so it supported the result without being the main driver.`
     case "budget_fit_score":
       return strategy === "aggressive"
-        ? `Budget fit scored ${scoreText} with a ${weightText} weight, so this crop keeps enough financial headroom while still chasing upside.`
-        : `Budget fit scored ${scoreText} with a ${weightText} weight, helping keep the capital burden manageable for the safer option.`
+        ? `Budget fit looked ${scoreText} and was ${weightText}, so this crop keeps enough financial headroom while still chasing upside.`
+        : `Budget fit looked ${scoreText} and was ${weightText}, helping keep the capital burden manageable for the safer option.`
     case "suitability_score":
       return score > 0
         ? strategy === "aggressive"
-          ? `Baseline suitability scored ${scoreText} and carries ${weightText}, so the crop still clears the agronomic checks while maximizing reward.`
-          : `Baseline suitability scored ${scoreText} and carries ${weightText}, making agronomic reliability one of the strongest reasons this crop has the lowest risk.`
-        : `Baseline suitability scored ${scoreText}, so this crop is being carried mostly by the other weighted factors.`
+          ? `Baseline suitability looked ${scoreText} and was ${weightText}, so the crop still clears the agronomic checks while maximizing reward.`
+          : `Baseline suitability looked ${scoreText} and was ${weightText}, making agronomic reliability one of the strongest reasons this crop has the lowest risk.`
+        : `Baseline suitability looked ${scoreText}, so this crop is being carried mostly by the other weighted factors.`
     default:
-      return `${metric} scored ${scoreText} with a ${weightText} weight in the ${strategy} formula.`
+      return `${metric} looked ${scoreText} and counted as ${weightText} in the ${strategy} formula.`
   }
 }
 
@@ -255,9 +259,6 @@ function buildStrategyCards(recommendation: RecommendationResponse | null): Stra
     },
   ].map((plan) => {
     const strategy = plan.strategy
-    const rewardScore = getRewardScore(plan.topCrop)
-    const riskScore = getRiskScore(plan.topCrop)
-    const badgeTone = strategy === "aggressive" ? getRewardTone(rewardScore) : getRiskTone(riskScore)
 
     return {
       strategy,
@@ -265,12 +266,8 @@ function buildStrategyCards(recommendation: RecommendationResponse | null): Stra
       cropId: plan.topCrop.crop_id,
       cropName: plan.topCrop.crop_name,
       icon: getCropIcon(plan.topCrop.crop_id, plan.topCrop.crop_name),
-      badgeTone,
-      badgeLabel: strategy === "aggressive" ? `${badgeTone} reward` : `${badgeTone} risk`,
       price: formatCurrency(plan.topCrop.price_result.predicted_price),
       growthCycle: `${plan.topCrop.growth_days} days`,
-      metricLabel: strategy === "aggressive" ? "Reward Score" : "Risk Score",
-      overallScore: formatPercent(strategy === "aggressive" ? rewardScore : riskScore),
       rationale: plan.rationale,
       explanationPoints: buildStrategyExplanationPoints(strategy, plan.topCrop),
     }
@@ -311,7 +308,7 @@ function getMockSeriesKey(cropId: string) {
   return "wheat"
 }
 
-export default function PlanningPage() {
+function PlanningPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const runIdParam = searchParams.get("runId")
@@ -319,6 +316,18 @@ export default function PlanningPage() {
   const [recommendation, setRecommendation] = useState<RecommendationResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [chatInput, setChatInput] = useState("")
+  const [isChatLoading, setIsChatLoading] = useState(false)
+  const [chatMessages, setChatMessages] = useState<
+    { role: "user" | "bot"; content: string }[]
+  >([
+    {
+      role: "bot",
+      content:
+        "Hi! I'm your AgriFlow plan assistant. Ask me to tune this recommendation by changing budget, harvest speed, risk preference, or excluding crops.",
+    },
+  ])
+  const chatEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let isActive = true
@@ -379,6 +388,72 @@ export default function PlanningPage() {
     }
   }, [recommendation, selectedStrategy])
 
+  useEffect(() => {
+    const riskPreference = recommendation?.user_preferences?.risk_preference
+    if (riskPreference === "low") {
+      setSelectedStrategy("conservative")
+      return
+    }
+    if (riskPreference === "high") {
+      setSelectedStrategy("aggressive")
+    }
+  }, [recommendation?.version_number, recommendation?.user_preferences?.risk_preference])
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [chatMessages])
+
+  const handlePlanAssistantSubmit = async (messageOverride?: string) => {
+    const outgoingMessage = (messageOverride ?? chatInput).trim()
+    if (!outgoingMessage) {
+      return
+    }
+
+    const activeRunId = recommendation?.run_id ?? runIdParam ?? getLatestRecommendationRunId()
+    if (!activeRunId) {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: "bot",
+          content: "I need a saved plan before I can tune recommendations. Generate a plan first, then I can help refine it.",
+        },
+      ])
+      return
+    }
+
+    setChatInput("")
+    setChatMessages((prev) => [...prev, { role: "user", content: outgoingMessage }])
+    setIsChatLoading(true)
+
+    try {
+      const response = await sendRecommendationChatMessage(activeRunId, outgoingMessage)
+      const nextRecommendation = response.updated_recommendation
+
+      if (nextRecommendation) {
+        saveRecommendationPlan(nextRecommendation)
+        setRecommendation(nextRecommendation)
+      }
+
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: "bot",
+          content: response.assistant_message,
+        },
+      ])
+    } catch (error) {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: "bot",
+          content: getRecommendationErrorMessage(error),
+        },
+      ])
+    } finally {
+      setIsChatLoading(false)
+    }
+  }
+
   const strategyRecommendations = buildStrategyCards(recommendation)
   const selectedRecommendation =
     strategyRecommendations.find((card) => card.strategy === selectedStrategy) || strategyRecommendations[0]
@@ -386,31 +461,6 @@ export default function PlanningPage() {
     recommendation?.status === "complete" && strategyRecommendations.length > 0
   const locationLabel = getLocationLabel(recommendation)
   const mockSeriesKey = getMockSeriesKey(selectedRecommendation?.cropId || "wheat")
-
-  const getBadgeColor = (strategy: StrategyKey, tone: ScoreTone) => {
-    if (strategy === "aggressive") {
-      switch (tone) {
-        case "high":
-          return "bg-success/15 text-success border-success/30"
-        case "medium":
-          return "bg-warning/15 text-warning-foreground border-warning/30"
-        case "low":
-        default:
-          return "bg-muted text-muted-foreground border-border"
-      }
-    }
-
-    switch (tone) {
-      case "low":
-        return "bg-success/15 text-success border-success/30"
-      case "medium":
-        return "bg-warning/15 text-warning-foreground border-warning/30"
-      case "high":
-        return "bg-destructive/15 text-destructive border-destructive/30"
-      default:
-        return "bg-muted text-muted-foreground border-border"
-    }
-  }
 
   if (isLoading) {
     return (
@@ -539,28 +589,19 @@ export default function PlanningPage() {
                                 ? "border-primary bg-primary/5 shadow-md"
                                 : "border-border hover:border-primary/50 hover:bg-muted/50"
                             }`}
-                          >
-                            <div className="flex items-start justify-between mb-3">
+                            >
+                              <div className="flex items-start justify-between mb-3">
                               <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${
                                 isSelected ? "bg-primary text-primary-foreground" : "bg-muted"
                               }`}>
                                 <Icon className="h-5 w-5" />
                               </div>
-                              <Badge className={getBadgeColor(card.strategy, card.badgeTone)}>
-                                {card.badgeLabel}
-                              </Badge>
                             </div>
-                            <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary/80">
-                                  {card.strategyLabel}
-                                </p>
-                                <h3 className="font-semibold text-foreground mt-1">{card.cropName}</h3>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-xs text-muted-foreground">{card.metricLabel}</p>
-                                <p className="text-lg font-semibold text-foreground">{card.overallScore}</p>
-                              </div>
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary/80">
+                                {card.strategyLabel}
+                              </p>
+                              <h3 className="font-semibold text-foreground mt-1">{card.cropName}</h3>
                             </div>
                             <p className="text-sm text-muted-foreground mt-3">
                               {card.rationale}
@@ -762,117 +803,115 @@ export default function PlanningPage() {
             )}
           </div>
 
-          <div className="space-y-6">
-            <Card className="shadow-lg shadow-primary/5">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Cloud className="h-5 w-5 text-primary" />
-                  Climate Summary
-                </CardTitle>
+          <div className="space-y-6 lg:sticky lg:top-24 h-fit">
+            <Card className="shadow-xl shadow-primary/5 border-border/50 h-[550px] flex flex-col">
+              <CardHeader className="border-b bg-muted/10 pb-4 shrink-0 flex flex-row items-center space-y-0 gap-3">
+                <div className="h-10 w-10 bg-primary/15 rounded-xl flex items-center justify-center shrink-0">
+                  <Bot className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <CardTitle className="text-base text-foreground font-semibold">
+                    Plan Assistant
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Tune your crop recommendation with chat
+                  </CardDescription>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 rounded-xl bg-muted/50">
-                    <div className="flex items-center gap-2 mb-1">
-                      <ThermometerSun className="h-4 w-4 text-warning" />
-                      <span className="text-xs text-muted-foreground">Temp</span>
-                    </div>
-                    <p className="font-semibold text-foreground">{climateData.temperature}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-muted/50">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Droplets className="h-4 w-4 text-info" />
-                      <span className="text-xs text-muted-foreground">Humidity</span>
-                    </div>
-                    <p className="font-semibold text-foreground">{climateData.humidity}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-muted/50">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Cloud className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">Rainfall</span>
-                    </div>
-                    <p className="font-semibold text-foreground">{climateData.rainfall}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-muted/50">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Sun className="h-4 w-4 text-warning" />
-                      <span className="text-xs text-muted-foreground">Forecast</span>
-                    </div>
-                    <p className="font-semibold text-primary">{climateData.forecast}</p>
+              <CardContent className="p-0 flex-1 overflow-hidden flex flex-col">
+                <div className="px-4 pt-4 pb-3 border-b bg-card/60 shrink-0">
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      "Prefer lower risk crops",
+                      "I want a faster harvest",
+                      "Exclude chili from the options",
+                    ].map((prompt) => (
+                      <Button
+                        key={prompt}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs"
+                        disabled={isChatLoading || !recommendation?.run_id}
+                        onClick={() => void handlePlanAssistantSubmit(prompt)}
+                      >
+                        {prompt}
+                      </Button>
+                    ))}
                   </div>
                 </div>
-                <div className="p-3 rounded-xl bg-primary/5 border border-primary/20">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium text-foreground">Optimal Conditions</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Current climate is favorable for {selectedRecommendation?.cropName || "crop"} cultivation.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
 
-            <Card className="shadow-lg shadow-primary/5">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-primary" />
-                  Market Insight
-                </CardTitle>
-                <CardDescription>Price trend (last 6 months)</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={marketData}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis dataKey="month" className="text-xs" tick={{ fontSize: 10 }} />
-                      <YAxis className="text-xs" tick={{ fontSize: 10 }} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "var(--color-card)",
-                          borderColor: "var(--color-border)",
-                          borderRadius: "8px",
-                          fontSize: "12px",
-                        }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="wheat"
-                        stroke="var(--color-chart-1)"
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="rice"
-                        stroke="var(--color-chart-2)"
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="vegetables"
-                        stroke="var(--color-chart-3)"
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {chatMessages.map((message, index) => (
+                    <div
+                      key={`${message.role}-${index}`}
+                      className={`flex items-end gap-2 ${
+                        message.role === "user" ? "flex-row-reverse" : "flex-row"
+                      }`}
+                    >
+                      <div
+                        className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
+                          message.role === "user" ? "bg-muted" : "bg-primary/10"
+                        }`}
+                      >
+                        {message.role === "user" ? (
+                          <User className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <Bot className="h-4 w-4 text-primary" />
+                        )}
+                      </div>
+                      <div
+                        className={`max-w-[80%] rounded-2xl p-3 text-sm ${
+                          message.role === "user"
+                            ? "bg-primary text-primary-foreground rounded-br-none"
+                            : "bg-muted text-foreground rounded-bl-none"
+                        }`}
+                      >
+                        {message.content}
+                      </div>
+                    </div>
+                  ))}
+                  {isChatLoading && (
+                    <div className="flex items-end gap-2">
+                      <div className="h-8 w-8 bg-primary/10 rounded-full flex items-center justify-center shrink-0">
+                        <Bot className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="bg-muted text-foreground rounded-2xl rounded-bl-none p-3 px-4">
+                        <span className="flex gap-1">
+                          <span className="w-1.5 h-1.5 bg-foreground/40 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <span className="w-1.5 h-1.5 bg-foreground/40 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                          <span className="w-1.5 h-1.5 bg-foreground/40 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
                 </div>
-                <div className="flex flex-wrap gap-3 mt-4">
-                  <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full bg-chart-1" />
-                    <span className="text-xs text-muted-foreground">Wheat</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full bg-chart-2" />
-                    <span className="text-xs text-muted-foreground">Rice</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full bg-chart-3" />
-                    <span className="text-xs text-muted-foreground">Vegetables</span>
-                  </div>
+
+                <div className="p-3 border-t bg-card shrink-0">
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      void handlePlanAssistantSubmit()
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <Input
+                      placeholder="Ask to change budget, risk, harvest speed, or exclude a crop..."
+                      className="flex-1 h-10 text-sm focus-visible:ring-1"
+                      value={chatInput}
+                      onChange={(event) => setChatInput(event.target.value)}
+                      disabled={isChatLoading || !recommendation?.run_id}
+                    />
+                    <Button
+                      type="submit"
+                      size="icon"
+                      className="shrink-0 h-10 w-10 transition-all hover:scale-105"
+                      disabled={!chatInput.trim() || isChatLoading || !recommendation?.run_id}
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </form>
                 </div>
               </CardContent>
             </Card>
@@ -889,6 +928,23 @@ export default function PlanningPage() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function PlanningPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <div className="h-12 w-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
+            <p className="text-muted-foreground">Loading your saved recommendation...</p>
+          </div>
+        </div>
+      }
+    >
+      <PlanningPageContent />
+    </Suspense>
   )
 }
 

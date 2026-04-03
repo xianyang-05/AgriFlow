@@ -172,6 +172,24 @@ export default function OnboardingPage() {
     return formatAreaInSquareMeters(length * width)
   }
 
+  const buildSoilAssistantReply = (result: {
+    soilType: string
+    confidence: string
+    explanation: string
+    degraded?: boolean
+    needsMoreDetail?: boolean
+  }) => {
+    if (result.needsMoreDetail) {
+      return result.explanation
+    }
+
+    const prefix = result.degraded
+      ? "I couldn't reach the soil model, so this is a fallback guess. "
+      : ""
+
+    return `${prefix}I identified this as **${result.soilType}** (confidence: ${result.confidence}). ${result.explanation}`
+  }
+
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!chatInput.trim()) return
@@ -188,8 +206,8 @@ export default function OnboardingPage() {
         body: JSON.stringify({ description: userMessage }),
       })
       const data = await res.json()
-      const result = data.fallback || data
-      const reply = `I identified this as **${result.soilType}** (confidence: ${result.confidence}). ${result.explanation}`
+      const result = data
+      const reply = buildSoilAssistantReply(result)
       setChatMessages(prev => [...prev, { role: "bot", content: reply, type: "text" }])
     } catch {
       // Fallback to keyword-based
@@ -228,8 +246,8 @@ export default function OnboardingPage() {
         body: JSON.stringify({ image: base64, description: "Analyze this soil photo" }),
       })
       const data = await res.json()
-      const result = data.fallback || data
-      const reply = `I identified this as **${result.soilType}** (confidence: ${result.confidence}). ${result.explanation}`
+      const result = data
+      const reply = buildSoilAssistantReply(result)
       setChatMessages(prev => [...prev, { role: "bot", content: reply, type: "text" }])
     } catch {
       setChatMessages(prev => [...prev, { role: "bot", content: "Looking at the distinct topsoil chunks and color, it appears highly organic. The crumbly texture and dark brown-orange hue suggest rich Loamy Soil composition. I recommend selecting Loamy Soil for your plan.", type: "text" }])

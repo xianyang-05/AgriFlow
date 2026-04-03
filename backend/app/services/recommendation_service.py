@@ -15,6 +15,7 @@ from app.services.geocoding_service import GeocodingService
 from app.services.hard_constraint_service import HardConstraintService
 from app.services.normalization_service import NormalizationService
 from app.services.plan_history_service import PlanHistoryService
+from app.services.price_service import PriceService
 from app.services.suitability_service import SuitabilityService
 
 
@@ -39,7 +40,10 @@ class RecommendationService:
         self.climate_service = climate_service or ClimateService()
         self.suitability_service = suitability_service or SuitabilityService(self.climate_service)
         self.hard_constraint_service = hard_constraint_service or HardConstraintService()
-        self.decision_service = decision_service or DecisionService(self.climate_service)
+        self.decision_service = decision_service or DecisionService(
+            climate_service=self.climate_service,
+            price_service=PriceService(),
+        )
         self.explanation_service = explanation_service or ExplanationService()
         self.crop_repository = crop_repository or CropRepository()
         self.run_repository = run_repository or RunRepository()
@@ -192,6 +196,7 @@ class RecommendationService:
             pipeline.suitability_results,
             pipeline.climate_output,
             pipeline.normalized_input,
+            pipeline.user_preferences,
         )
         pipeline.scored_crops = decision_output.ranked_crops
         pipeline.aggressive_plan = decision_output.aggressive_plan

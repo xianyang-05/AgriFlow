@@ -38,6 +38,7 @@ class MockLLMService:
     def __init__(self) -> None:
         self.last_history = None
         self.intent_response = IntentClassification(intent="question", confidence=0.9)
+        self.revert_disambiguation_response = IntentClassification(intent="revert", confidence=0.9)
 
     def extract_normalization(self, raw_input, prompt_notes=None):
         lat = lon = None
@@ -60,6 +61,10 @@ class MockLLMService:
     def classify_intent(self, message, history, context):
         self.last_history = history
         return self.intent_response
+
+    def disambiguate_revert_intent(self, message, history, context):
+        self.last_history = history
+        return self.revert_disambiguation_response
 
     def answer_question(self, message, history, context):
         self.last_history = history

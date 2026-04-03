@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
@@ -129,7 +129,7 @@ const mockPhases: Phase[] = [
   }
 ]
 
-export default function ExecutionPlanPage() {
+function ExecutionPlanPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const crop = searchParams.get("crop") || "Wheat"
@@ -582,5 +582,22 @@ export default function ExecutionPlanPage() {
         </Dialog>
       </main>
     </div>
+  )
+}
+
+export default function ExecutionPlanPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#f7f5ed] flex items-center justify-center">
+          <div className="text-center space-y-3">
+            <div className="h-12 w-12 border-4 border-[#4CAF50]/30 border-t-[#4CAF50] rounded-full animate-spin mx-auto" />
+            <p className="text-sm text-[#5D4037]">Loading execution plan...</p>
+          </div>
+        </div>
+      }
+    >
+      <ExecutionPlanPageContent />
+    </Suspense>
   )
 }

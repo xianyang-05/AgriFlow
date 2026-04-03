@@ -1,5 +1,3 @@
-import re
-
 from app.exceptions import LLMError
 from app.logging_config import update_request_logging
 from app.repositories.chat_repository import ChatRepository
@@ -31,10 +29,56 @@ class ChatService:
 
         try:
             classification = self.llm_service.classify_intent(request.message, history_payload, context)
-            if classification.confidence < 0.5:
-                raise LLMError("Low-confidence chat intent")
         except LLMError:
-            classification = self._keyword_fallback(request.message)
+            return self._handle_unclassified(
+                db,
+                request,
+                current,
+                message=(
+                    "I couldn't analyze that request because the plan assistant model is unavailable right now. "
+                    "Please check the Ollama service and configured model, then try again."
+                ),
+            )
+
+        if classification.confidence < 0.5:
+            return self._handle_unclassified(
+                db,
+                request,
+                current,
+                message=(
+                    "I couldn't confidently interpret that request. Please rephrase it as a question, "
+                    "a plan change, or a revert request."
+                ),
+            )
+
+        if classification.intent == "revert":
+            try:
+                classification = self.llm_service.disambiguate_revert_intent(
+                    request.message,
+                    history_payload,
+                    context,
+                )
+            except LLMError:
+                return self._handle_unclassified(
+                    db,
+                    request,
+                    current,
+                    message=(
+                        "I couldn't confirm whether you wanted to revert a previous version or modify the current plan "
+                        "because the plan assistant model is unavailable right now. Please try again after checking Ollama."
+                    ),
+                )
+
+            if classification.confidence < 0.5:
+                return self._handle_unclassified(
+                    db,
+                    request,
+                    current,
+                    message=(
+                        "I couldn't confidently tell whether you wanted to revert the previous version or modify the current plan. "
+                        "Please say either 'revert to the previous version' or describe the change you want."
+                    ),
+                )
 
         update_request_logging(chat_intent=classification.intent)
 
@@ -74,6 +118,21 @@ class ChatService:
             warnings=current.warnings,
         )
 
+    def _handle_unclassified(self, db, request: ChatRequest, current, *, message: str) -> ChatResponse:
+        self._save_message_pair(db, request.run_id, request.message, message, "question")
+        update_request_logging(chat_intent="question")
+        return ChatResponse(
+            run_id=request.run_id,
+            intent="question",
+            confidence=0.0,
+            assistant_message=message,
+            has_previous_version=current.has_previous_version,
+            status=current.status,
+            clarification_needed=current.clarification_needed,
+            clarification_questions=current.clarification_questions,
+            warnings=current.warnings,
+        )
+
     def _handle_modification(self, db, request: ChatRequest, current, classification: IntentClassification) -> ChatResponse:
         updated_normalized = self._apply_normalized_updates(
             current.normalized_input or NormalizedFarmInput(),
@@ -89,7 +148,10 @@ class ChatService:
             updated_normalized,
             updated_preferences,
         )
-        assistant_message = updated_recommendation.explanation or "Recommendation updated."
+        assistant_message = self._build_modification_message(
+            classification.updates,
+            updated_recommendation,
+        )
         self._save_message_pair(db, request.run_id, request.message, assistant_message, classification.intent)
         return ChatResponse(
             run_id=request.run_id,
@@ -106,6 +168,25 @@ class ChatService:
         )
 
     def _handle_revert(self, db, request: ChatRequest, classification: IntentClassification) -> ChatResponse:
+        current = self.plan_history_service.get_current(db, request.run_id)
+        if not current.has_previous_version:
+            assistant_message = (
+                "There isn't a previous saved recommendation version to revert to yet. "
+                "If you want to change the current plan, tell me what you want adjusted."
+            )
+            self._save_message_pair(db, request.run_id, request.message, assistant_message, classification.intent)
+            return ChatResponse(
+                run_id=request.run_id,
+                intent=classification.intent,
+                confidence=classification.confidence,
+                assistant_message=assistant_message,
+                has_previous_version=current.has_previous_version,
+                status=current.status,
+                clarification_needed=current.clarification_needed,
+                clarification_questions=current.clarification_questions,
+                warnings=current.warnings,
+            )
+
         reverted = self.recommendation_service.revert(db, request.run_id)
         assistant_message = f"Reverted to the previous recommendation snapshot."
         self._save_message_pair(db, request.run_id, request.message, assistant_message, classification.intent)
@@ -156,48 +237,46 @@ class ChatService:
         self.chat_repository.create(db, run_id, "user", user_message, intent)
         self.chat_repository.create(db, run_id, "assistant", assistant_message, intent)
 
-    def _keyword_fallback(self, message: str) -> IntentClassification:
-        lowered = message.lower()
-        updates = self._extract_updates_from_text(lowered)
-        if any(keyword in lowered for keyword in ("revert", "go back", "undo")):
-            intent = "revert"
-        elif updates.model_dump(exclude_none=True):
-            intent = "modification"
-        else:
-            intent = "question"
-        return IntentClassification(intent=intent, confidence=0.4, updates=updates)
+    def _build_modification_message(self, updates: ChatUpdatePayload, updated_recommendation) -> str:
+        change_summary: list[str] = []
 
-    def _extract_updates_from_text(self, message: str) -> ChatUpdatePayload:
-        payload: dict[str, object] = {}
+        if updates.budget_myr is not None:
+            change_summary.append(f"budget to MYR {updates.budget_myr:,.0f}")
+        if updates.area_m2 is not None:
+            change_summary.append(f"area to {updates.area_m2:,.0f} m2")
+        if updates.target_month is not None:
+            change_summary.append(f"planting month to {updates.target_month}")
+        if updates.forecast_horizon_months is not None:
+            change_summary.append(f"forecast horizon to {updates.forecast_horizon_months} months")
+        if updates.soil_type is not None:
+            change_summary.append(f"soil type to {updates.soil_type}")
+        if updates.harvest_preference == "fast":
+            change_summary.append("favor faster harvest crops")
+        if updates.risk_preference == "low":
+            change_summary.append("favor safer, lower-risk crops")
+        elif updates.risk_preference == "high":
+            change_summary.append("favor higher-upside crops")
+        if updates.excluded_crops:
+            change_summary.append(f"exclude {', '.join(updates.excluded_crops)}")
+        if updates.preferred_crops:
+            change_summary.append(f"prioritize {', '.join(updates.preferred_crops)}")
 
-        budget_match = re.search(r"budget(?: to| is)?\s+(\d+(?:\.\d+)?)", message)
-        area_match = re.search(r"area(?: to| is)?\s+(\d+(?:\.\d+)?)", message)
-        month_match = re.search(r"month(?: to| is)?\s+(\d{1,2})", message)
-        horizon_match = re.search(r"horizon(?: to| is)?\s+(\d+)", message)
-        exclude_match = re.findall(r"exclude\s+([a-z_ ]+)", message)
-        prefer_match = re.findall(r"prefer\s+([a-z_ ]+)", message)
+        intro = "I updated the plan."
+        if change_summary:
+            intro = f"I updated the plan to {', '.join(change_summary)}."
 
-        if budget_match:
-            payload["budget_myr"] = float(budget_match.group(1))
-        if area_match:
-            payload["area_m2"] = float(area_match.group(1))
-        if month_match:
-            payload["target_month"] = int(month_match.group(1))
-        if horizon_match:
-            payload["forecast_horizon_months"] = int(horizon_match.group(1))
+        if updated_recommendation.status != "complete":
+            return intro
 
-        for soil_type in ("loamy", "clay", "sandy", "silt", "peat", "chalky"):
-            if soil_type in message:
-                payload["soil_type"] = soil_type
-                break
+        aggressive_crop = updated_recommendation.aggressive_plan.top_crop.crop_name if updated_recommendation.aggressive_plan else None
+        conservative_crop = updated_recommendation.conservative_plan.top_crop.crop_name if updated_recommendation.conservative_plan else None
 
-        if "fast" in message:
-            payload["harvest_preference"] = "fast"
-        if exclude_match:
-            payload["excluded_crops"] = [item.strip().replace(" ", "_") for item in exclude_match]
-        if prefer_match:
-            payload["preferred_crops"] = [item.strip().replace(" ", "_") for item in prefer_match]
-        if "note" in message:
-            payload["notes"] = message
-
-        return ChatUpdatePayload(**payload)
+        if aggressive_crop and conservative_crop and aggressive_crop != conservative_crop:
+            return (
+                f"{intro} The higher-upside option is now {aggressive_crop}, and the safer option is {conservative_crop}."
+            )
+        if aggressive_crop:
+            return f"{intro} The top recommendation is now {aggressive_crop}."
+        if conservative_crop:
+            return f"{intro} The safer recommendation is now {conservative_crop}."
+        return intro
