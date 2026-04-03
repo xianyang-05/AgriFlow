@@ -3,14 +3,21 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Leaf, MapPin, Ruler, Wallet, FlaskConical, ArrowRight, CheckCircle2, HelpCircle, Image as ImageIcon, Send, Loader2, Bot, User } from "lucide-react"
+import { Leaf, MapPin, Ruler, Wallet, FlaskConical, ArrowRight, CheckCircle2, HelpCircle, Image as ImageIcon, Send, Bot, User, AlertCircle } from "lucide-react"
 import dynamic from 'next/dynamic'
 import Image from "next/image"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import {
+  createRecommendation,
+  getRecommendationErrorMessage,
+  saveLatestRecommendationRunId,
+  saveRecommendationPlan,
+} from "@/lib/recommendations"
 
 const SelectMap = dynamic(() => import('@/components/SelectMap'), { ssr: false })
 
@@ -41,6 +48,7 @@ export default function OnboardingPage() {
     soilType: "",
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   // Chatbot State
   const [chatInput, setChatInput] = useState("")
@@ -101,11 +109,33 @@ export default function OnboardingPage() {
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
-    // Store form data in localStorage for demo purposes
-    localStorage.setItem("farmData", JSON.stringify(formData))
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    router.push("/planning")
+    setSubmitError(null)
+
+    try {
+      const recommendation = await createRecommendation({
+        area_text: formData.farmSize.trim() || null,
+        budget_text: formData.budget.trim() || null,
+        location_text: formData.coordinates
+          ? `${formData.coordinates.lat}, ${formData.coordinates.lng}`
+          : formData.location.trim() || null,
+        notes: null,
+        soil_type_text: formData.soilType || null,
+      })
+
+      localStorage.setItem("farmData", JSON.stringify(formData))
+      saveRecommendationPlan(recommendation)
+
+      if (!recommendation.run_id) {
+        throw new Error("The backend did not return a plan identifier.")
+      }
+
+      saveLatestRecommendationRunId(recommendation.run_id)
+      router.push(`/planning?runId=${recommendation.run_id}`)
+    } catch (error) {
+      setSubmitError(getRecommendationErrorMessage(error))
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const isStepComplete = (step: number) => {
@@ -255,18 +285,22 @@ export default function OnboardingPage() {
               {currentStep === 2 && (
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="farmSize">Farm Size (in acres)</Label>
+                    <Label htmlFor="farmSize">Farm Size</Label>
                     <div className="relative">
                       <Ruler className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="farmSize"
-                        type="number"
-                        placeholder="e.g., 50"
+                        type="text"
+                        placeholder="e.g., 1 acre, 2 hectares, 10 football fields"
                         value={formData.farmSize}
                         onChange={(e) => setFormData({ ...formData, farmSize: e.target.value })}
                         className="pl-10 h-12"
                       />
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      Enter the size exactly as you measure it. Supported examples include
+                      1 acre, 2 hectares, and 10 football fields.
+                    </p>
                   </div>
                 </div>
               )}
@@ -275,7 +309,7 @@ export default function OnboardingPage() {
               {currentStep === 3 && (
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="budget">Investment Budget (USD)</Label>
+                    <Label htmlFor="budget">Investment Budget (MYR)</Label>
                     <div className="relative">
                       <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
@@ -358,6 +392,14 @@ export default function OnboardingPage() {
                     </Select>
                   </div>
                 </div>
+              )}
+
+              {submitError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Unable to generate a plan</AlertTitle>
+                  <AlertDescription>{submitError}</AlertDescription>
+                </Alert>
               )}
 
               <div className="flex flex-col pt-4 mt-auto">
