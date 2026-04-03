@@ -4,11 +4,17 @@ from app.schemas.decision import CropPlan, DecisionOutput, ScoreBreakdown, Score
 from app.schemas.input import NormalizedFarmInput, UserPreferences
 from app.schemas.suitability import SuitabilityResult
 from app.exceptions import NoViableCropsError
+from app.logging_config import get_logger, update_request_logging
 from app.services.climate_service import ClimateService
 from app.services.price_service import PriceService
 
+logger = get_logger()
+
 
 class DecisionService:
+    FASTEST_GROWTH_DAYS = 30
+    SLOWEST_GROWTH_DAYS = 120
+
     # ------------------------------------------------------------------
     # Aggressive: price yield is dominant (0.55).
     # Climate and duration still contribute at low weights so catastrophic
@@ -94,11 +100,18 @@ class DecisionService:
             )
 
         suitability_map = {r.crop_id: r for r in suitability_results}
-        price_scores = self.price_service.build_rank_scores(eligible_crops)
+        try:
+            price_scores = self.price_service.build_rank_scores(
+                eligible_crops,
+                normalized_input=normalized_input,
+            )
+        except TypeError:
+            price_scores = self.price_service.build_rank_scores(eligible_crops)
         scored_crops: list[ScoredCrop] = []
 
         for crop in eligible_crops:
             suitability = suitability_map[crop.id]
+            price_result = self._get_price_result(crop, normalized_input)
 
             breakdown = ScoreBreakdown(
                 suitability_score=self._suitability_score(suitability),
@@ -127,7 +140,7 @@ class DecisionService:
                     reward_score=aggressive_score,
                     risk_score=round(max(0.0, min(1.0, 1.0 - conservative_score)), 4),
                     score_breakdown=breakdown,
-                    price_result=self.price_service.get_price(crop),
+                    price_result=price_result,
                     growth_days=crop.growth_days,
                 )
             )
@@ -135,8 +148,11 @@ class DecisionService:
         # Each plan is ranked independently by its own scoring axis.
         # Aggressive: price-led, climate visible but minor.
         # Conservative: safety-led, price as tiebreaker.
+        aggressive_candidates = [
+            crop for crop in scored_crops if crop.price_result.trend != "DOWN"
+        ]
         aggressive_ranked = sorted(
-            scored_crops,
+            aggressive_candidates or scored_crops,
             key=lambda c: c.aggressive_score,
             reverse=True,
         )
@@ -145,14 +161,48 @@ class DecisionService:
             key=lambda c: (c.conservative_score, c.score_breakdown.price_score),
             reverse=True,
         )
+        aggressive_downtrend_crops = [
+            crop.crop_id for crop in scored_crops if crop.price_result.trend == "DOWN"
+        ]
+        aggressive_non_down_crops = [
+            crop.crop_id for crop in scored_crops if crop.price_result.trend != "DOWN"
+        ]
+        aggressive_filter_mode = (
+            "filtered_non_down" if aggressive_candidates else "fallback_all_scored"
+        )
+        price_trend_snapshot = [
+            {
+                "crop_id": crop.crop_id,
+                "trend": crop.price_result.trend,
+                "pct_change": crop.price_result.pct_change,
+                "aggressive_score": crop.aggressive_score,
+                "conservative_score": crop.conservative_score,
+            }
+            for crop in scored_crops
+        ]
+        update_request_logging(
+            aggressive_filter_mode=aggressive_filter_mode,
+            aggressive_non_down_crop_ids=aggressive_non_down_crops,
+            aggressive_downtrend_crop_ids=aggressive_downtrend_crops,
+            aggressive_ranked_crop_ids=[crop.crop_id for crop in aggressive_ranked],
+            price_trend_snapshot=price_trend_snapshot,
+        )
+        logger.info(
+            "decision.aggressive_filter",
+            aggressive_filter_mode=aggressive_filter_mode,
+            aggressive_non_down_crop_ids=aggressive_non_down_crops,
+            aggressive_downtrend_crop_ids=aggressive_downtrend_crops,
+            aggressive_ranked_crop_ids=[crop.crop_id for crop in aggressive_ranked],
+            price_trend_snapshot=price_trend_snapshot,
+        )
 
-        aggressive_top = aggressive_ranked[0]
+        aggressive_top = aggressive_ranked[0] if aggressive_ranked else None
 
         # Prefer a different crop for the conservative plan so both plans
         # offer the farmer a genuine choice. Fall back to the same crop
         # only when there is no alternative.
         conservative_candidates = [
-            c for c in conservative_ranked if c.crop_id != aggressive_top.crop_id
+            c for c in conservative_ranked if aggressive_top is None or c.crop_id != aggressive_top.crop_id
         ]
         conservative_top = (
             conservative_candidates[0] if conservative_candidates else conservative_ranked[0]
@@ -160,13 +210,17 @@ class DecisionService:
 
         return DecisionOutput(
             ranked_crops=aggressive_ranked,
-            aggressive_plan=CropPlan(
-                strategy="aggressive",
-                top_crop=aggressive_top,
-                rationale=(
-                    "Selected for the highest expected price yield. "
-                    "Climate risk is considered but does not override price as the primary driver."
-                ),
+            aggressive_plan=(
+                CropPlan(
+                    strategy="aggressive",
+                    top_crop=aggressive_top,
+                    rationale=(
+                        "Selected for the highest expected price yield. "
+                        "Climate risk is considered but does not override price as the primary driver."
+                    ),
+                )
+                if aggressive_top is not None
+                else None
             ),
             conservative_plan=CropPlan(
                 strategy="conservative",
@@ -184,7 +238,7 @@ class DecisionService:
 
     def _suitability_score(self, suitability: SuitabilityResult) -> float:
         if not suitability.suitable:
-            return 0.0
+            return 0.25
         if suitability.marginal:
             return 0.6
         return 1.0
@@ -198,30 +252,19 @@ class DecisionService:
         if crop_min_cost <= 0:
             return 0.0
         budget = normalized_input.budget_myr or 0.0
-        return max(0.0, min(1.0, (budget - crop_min_cost) / crop_min_cost))
+        return max(0.0, min(1.0, budget / crop_min_cost))
 
     def _duration_fit_score(
         self,
         crop: CropRecord,
         user_preferences: UserPreferences,
     ) -> float:
-        """
-        Returns 1.0 when no harvest preference is set so duration carries
-        no meaningful weight until the user explicitly requests it.
-
-        When harvest_preference is "fast", crops are penalised beyond
-        120 days. Example reference points:
-          kangkung  ~30d  -> 0.75
-          long bean ~65d  -> 0.46
-          maize     ~90d  -> 0.25
-          chili    ~120d  -> 0.00
-        """
-        if not user_preferences.harvest_preference:
-            return 1.0
+        span = max(1, self.SLOWEST_GROWTH_DAYS - self.FASTEST_GROWTH_DAYS)
+        base_score = 1.0 - ((crop.growth_days - self.FASTEST_GROWTH_DAYS) / span)
+        base_score = max(0.0, min(1.0, base_score))
         if user_preferences.harvest_preference == "fast":
-            return max(0.0, min(1.0, 1.0 - (crop.growth_days / 120.0)))
-        # Extend for "medium" / "slow" in v2 without changing the caller.
-        return 1.0
+            return min(1.0, round((base_score * 0.85) + 0.15, 4))
+        return round(base_score, 4)
 
     def _weighted_score(
         self,
@@ -258,6 +301,16 @@ class DecisionService:
             conservative_score = self._blend_scores(conservative_score, upside_score, 0.35)
 
         return aggressive_score, conservative_score
+
+    def _get_price_result(
+        self,
+        crop: CropRecord,
+        normalized_input: NormalizedFarmInput,
+    ):
+        try:
+            return self.price_service.get_price(crop, normalized_input=normalized_input)
+        except TypeError:
+            return self.price_service.get_price(crop)
 
     def _blend_scores(self, base_score: float, preference_score: float, preference_weight: float) -> float:
         blended = (base_score * (1.0 - preference_weight)) + (preference_score * preference_weight)

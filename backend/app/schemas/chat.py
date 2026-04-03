@@ -11,6 +11,11 @@ class ChatRequest(BaseModel):
     message: str
 
 
+class PreviewChatRequest(BaseModel):
+    message: str
+    current_recommendation: RecommendationResponse
+
+
 class ChatUpdatePayload(BaseModel):
     budget_myr: float | None = None
     area_m2: float | None = None
@@ -40,7 +45,7 @@ class IntentClassification(BaseModel):
 
 
 class ChatResponse(ResponseEnvelope):
-    run_id: str
+    run_id: str | None = None
     intent: Literal["question", "modification", "revert"]
     confidence: float
     applied_updates: ChatUpdatePayload = Field(default_factory=ChatUpdatePayload)

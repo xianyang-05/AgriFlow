@@ -31,9 +31,35 @@ export interface UserPreferences {
 
 export interface PriceResult {
   crop_id: string
+  current_price: number
   predicted_price: number
+  pct_change: number
+  trend: "UP" | "STABLE" | "DOWN"
   confidence: string
   method: string
+}
+
+export interface ForecastBlock {
+  horizon_months: number
+  predicted_rain_mm: number
+  rain_p10: number
+  rain_p50: number
+  rain_p90: number
+  dry_risk: number
+  normal_risk: number
+  wet_risk: number
+  top_analog_years: number[]
+}
+
+export interface ClimateOutput {
+  model_type: string
+  request_location: {
+    lat: number
+    lon: number
+  }
+  target_month: number
+  forecast_horizon_months: number
+  forecast_blocks: ForecastBlock[]
 }
 
 export interface ScoreBreakdown {
@@ -97,8 +123,6 @@ export interface RecommendationChatResponse {
 }
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(/\/+$/, "")
-const PLANS_BY_RUN_ID_KEY = "agriflow:plansByRunId"
-const LATEST_RUN_ID_KEY = "agriflow:latestRunId"
 
 class RecommendationApiError extends Error {
   status: number
@@ -138,38 +162,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
-function canUseStorage() {
-  return typeof window !== "undefined"
-}
-
-function readPlansByRunId(): Record<string, RecommendationResponse> {
-  if (!canUseStorage()) {
-    return {}
-  }
-
-  const raw = window.localStorage.getItem(PLANS_BY_RUN_ID_KEY)
-  if (!raw) {
-    return {}
-  }
-
-  try {
-    const parsed = JSON.parse(raw)
-    return typeof parsed === "object" && parsed !== null ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
-function writePlansByRunId(plansByRunId: Record<string, RecommendationResponse>) {
-  if (!canUseStorage()) {
-    return
-  }
-
-  window.localStorage.setItem(PLANS_BY_RUN_ID_KEY, JSON.stringify(plansByRunId))
-}
-
 export async function createRecommendation(payload: RecommendationCreatePayload) {
   return request<RecommendationResponse>("/api/v1/recommendations", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function createPreviewRecommendation(payload: RecommendationCreatePayload) {
+  return request<RecommendationResponse>("/api/v1/recommendations/preview", {
     method: "POST",
     body: JSON.stringify(payload),
   })
@@ -191,35 +192,17 @@ export async function sendRecommendationChatMessage(runId: string, message: stri
   })
 }
 
-export function saveRecommendationPlan(plan: RecommendationResponse) {
-  if (!plan.run_id || !canUseStorage()) {
-    return
-  }
-
-  const plansByRunId = readPlansByRunId()
-  plansByRunId[plan.run_id] = plan
-  writePlansByRunId(plansByRunId)
-  window.localStorage.setItem(LATEST_RUN_ID_KEY, plan.run_id)
-}
-
-export function getStoredRecommendationPlan(runId: string) {
-  return readPlansByRunId()[runId] || null
-}
-
-export function getLatestRecommendationRunId() {
-  if (!canUseStorage()) {
-    return null
-  }
-
-  return window.localStorage.getItem(LATEST_RUN_ID_KEY)
-}
-
-export function saveLatestRecommendationRunId(runId: string) {
-  if (!canUseStorage()) {
-    return
-  }
-
-  window.localStorage.setItem(LATEST_RUN_ID_KEY, runId)
+export async function sendPreviewRecommendationChatMessage(
+  currentRecommendation: RecommendationResponse,
+  message: string,
+) {
+  return request<RecommendationChatResponse>("/api/v1/chat/preview", {
+    method: "POST",
+    body: JSON.stringify({
+      message,
+      current_recommendation: currentRecommendation,
+    }),
+  })
 }
 
 export function getRecommendationErrorMessage(error: unknown) {

@@ -10,7 +10,7 @@ crop_repository = CropRepository()
 
 
 @router.get("", response_model=list[CropRecord])
-def list_crops(
+async def list_crops(
     enabled: bool = Query(default=True),
     db: Session = Depends(get_db),
 ) -> list[CropRecord]:

@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { Suspense, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -6,6 +6,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import PaddyFieldLoadingScreen from "@/components/PaddyFieldLoadingScreen"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import {
@@ -14,9 +15,12 @@ import {
   TrendingUp,
   TrendingDown,
   Droplets,
+  CloudRain,
   ThermometerSun,
   AlertTriangle,
   CheckCircle2,
+  Wallet,
+  Clock3,
   Wheat,
   Apple,
   Carrot,
@@ -34,27 +38,27 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  AreaChart,
-  Area,
 } from "recharts"
 import {
-  getLatestRecommendationRunId,
+  createRecommendation,
+  createPreviewRecommendation,
+  type ClimateOutput,
+  type ForecastBlock,
   getRecommendation,
   getRecommendationErrorMessage,
-  getStoredRecommendationPlan,
   sendRecommendationChatMessage,
+  sendPreviewRecommendationChatMessage,
   type RankedCrop,
   type RecommendationResponse,
-  saveRecommendationPlan,
 } from "@/lib/recommendations"
 
 const marketData = [
-  { month: "Jan", wheat: 280, rice: 320, corn: 180, vegetables: 420 },
-  { month: "Feb", wheat: 300, rice: 310, corn: 190, vegetables: 400 },
-  { month: "Mar", wheat: 290, rice: 340, corn: 200, vegetables: 450 },
-  { month: "Apr", wheat: 320, rice: 350, corn: 220, vegetables: 480 },
-  { month: "May", wheat: 340, rice: 380, corn: 240, vegetables: 520 },
-  { month: "Jun", wheat: 360, rice: 400, corn: 260, vegetables: 550 },
+  { month: "Jan", wheat: 280, rice: 320, corn: 180, vegetables: 420, tomato: 510 },
+  { month: "Feb", wheat: 300, rice: 310, corn: 190, vegetables: 400, tomato: 535 },
+  { month: "Mar", wheat: 290, rice: 340, corn: 200, vegetables: 450, tomato: 590 },
+  { month: "Apr", wheat: 320, rice: 350, corn: 220, vegetables: 480, tomato: 640 },
+  { month: "May", wheat: 340, rice: 380, corn: 240, vegetables: 520, tomato: 710 },
+  { month: "Jun", wheat: 360, rice: 400, corn: 260, vegetables: 550, tomato: 760 },
 ]
 
 type CropIcon = typeof Wheat
@@ -66,11 +70,26 @@ interface StrategyRecommendationCard {
   strategyLabel: string
   cropId: string
   cropName: string
+  topCrop: RankedCrop
   icon: CropIcon
+  score: number
   price: string
   growthCycle: string
   rationale: string
-  explanationPoints: string[]
+  explanationMetrics: StrategyMetric[]
+}
+
+type MetricKey = Extract<keyof RankedCrop["score_breakdown"], string>
+
+interface StrategyMetric {
+  metric: MetricKey
+  label: string
+  weight: number
+  score: number
+  signal: string
+  summary: string
+  effect?: string
+  tone?: "strong" | "medium" | "weak"
 }
 
 function formatCurrency(value: number) {
@@ -79,6 +98,16 @@ function formatCurrency(value: number) {
     currency: "MYR",
     maximumFractionDigits: 0,
   }).format(value)
+}
+
+function getMetricTone(score: number): "strong" | "medium" | "weak" {
+  if (score >= 0.75) {
+    return "strong"
+  }
+  if (score >= 0.45) {
+    return "medium"
+  }
+  return "weak"
 }
 
 function getCropIcon(cropId: string, cropName: string): CropIcon {
@@ -90,7 +119,7 @@ function getCropIcon(cropId: string, cropName: string): CropIcon {
   if (key.includes("chili") || key.includes("okra") || key.includes("bean")) {
     return Carrot
   }
-  if (key.includes("eggplant") || key.includes("cucumber")) {
+  if (key.includes("eggplant") || key.includes("cucumber") || key.includes("tomato")) {
     return Apple
   }
 
@@ -133,98 +162,272 @@ function pickLowestRiskCrop(crops: RankedCrop[], excludeCropId?: string) {
 
 const STRATEGY_WEIGHTS: Record<StrategyKey, Record<keyof RankedCrop["score_breakdown"], number>> = {
   aggressive: {
-    suitability_score: 0.25,
-    climate_score: 0.2,
-    budget_fit_score: 0.2,
-    price_score: 0.05,
-    duration_fit_score: 0.3,
+    price_score: 0.55,
+    suitability_score: 0.2,
+    budget_fit_score: 0.1,
+    climate_score: 0.1,
+    duration_fit_score: 0.05,
   },
   conservative: {
-    suitability_score: 0.35,
-    climate_score: 0.35,
-    budget_fit_score: 0.2,
-    price_score: 0.05,
+    climate_score: 0.4,
+    suitability_score: 0.3,
+    budget_fit_score: 0.15,
+    price_score: 0.1,
     duration_fit_score: 0.05,
   },
 }
 
-function describeScore(value: number) {
-  if (value >= 0.85) {
-    return "excellent"
-  }
-  if (value >= 0.65) {
-    return "strong"
-  }
-  if (value >= 0.45) {
-    return "solid"
-  }
-  if (value >= 0.25) {
-    return "limited"
-  }
-  return "weak"
+function formatSignedPercent(value: number) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`
 }
 
-function describeWeight(value: number) {
-  if (value >= 0.3) {
-    return "a major factor"
+function selectForecastBlock(
+  climateOutput: ClimateOutput | null | undefined,
+  crop: RankedCrop,
+): ForecastBlock | null {
+  if (!climateOutput?.forecast_blocks?.length) {
+    return null
   }
-  if (value >= 0.15) {
-    return "an important factor"
-  }
-  return "a smaller factor"
+
+  const targetHorizon = Math.max(1, Math.round(crop.growth_days / 30))
+  return [...climateOutput.forecast_blocks].sort(
+    (left, right) =>
+      Math.abs(left.horizon_months - targetHorizon) - Math.abs(right.horizon_months - targetHorizon),
+  )[0]
 }
 
-function buildMetricExplanation(
+function describeClimateSignal(block: ForecastBlock | null) {
+  if (!block) {
+    return {
+      signal: "Forecast unavailable",
+      summary: "Climate data was not available for this crop window.",
+    }
+  }
+
+  if (block.wet_risk >= block.dry_risk && block.wet_risk >= block.normal_risk) {
+    return {
+      signal: `Future rain leans wet: ${(block.wet_risk * 100).toFixed(0)}% wet risk`,
+      summary: `${block.predicted_rain_mm.toFixed(0)}mm rain is expected, so flood pressure is higher for sensitive crops.`,
+    }
+  }
+
+  if (block.dry_risk >= block.wet_risk && block.dry_risk >= block.normal_risk) {
+    return {
+      signal: `Future rain leans dry: ${(block.dry_risk * 100).toFixed(0)}% dry risk`,
+      summary: `${block.predicted_rain_mm.toFixed(0)}mm rain is expected, so drought stress matters more for sensitive crops.`,
+    }
+  }
+
+  return {
+    signal: `Future rain stays near normal: ${(block.normal_risk * 100).toFixed(0)}% normal risk`,
+    summary: `${block.predicted_rain_mm.toFixed(0)}mm rain is expected, which is a steadier climate signal.`,
+  }
+}
+
+function buildPriceMetric(strategy: StrategyKey, crop: RankedCrop): StrategyMetric {
+  const trendSignal =
+    crop.price_result.trend === "UP"
+      ? "Future trend up"
+      : crop.price_result.trend === "DOWN"
+        ? "Future trend down"
+        : "Future trend stable"
+
+  return {
+    metric: "price_score",
+    label: "Price",
+    weight: STRATEGY_WEIGHTS[strategy].price_score,
+    score: crop.score_breakdown.price_score,
+    signal: `${trendSignal}: ${formatSignedPercent(crop.price_result.pct_change)}`,
+    summary: `RM ${crop.price_result.current_price.toFixed(2)} now, RM ${crop.price_result.predicted_price.toFixed(2)} predicted.`,
+  }
+}
+
+function buildClimateMetric(
   strategy: StrategyKey,
-  metric: keyof RankedCrop["score_breakdown"],
-  score: number,
-  weight: number,
-) {
-  const scoreText = describeScore(score)
-  const weightText = describeWeight(weight)
+  crop: RankedCrop,
+  recommendation: RecommendationResponse | null,
+): StrategyMetric {
+  const climateSignal = describeClimateSignal(selectForecastBlock(recommendation?.climate_output, crop))
 
-  switch (metric) {
-    case "climate_score":
-      return strategy === "aggressive"
-        ? `Weather stability looked ${scoreText} and remained ${weightText} in the reward formula, so forecast fit still added meaningful upside.`
-        : `Weather stability looked ${scoreText} and remained ${weightText} in the risk formula, making forecast reliability one of the biggest reasons this crop stayed safer.`
-    case "duration_fit_score":
-      return strategy === "aggressive"
-        ? `Harvest speed looked ${scoreText} and was ${weightText}, making crop duration one of the main reward drivers.`
-        : `Crop duration looked ${scoreText}; it was only ${weightText} in the risk formula, so it mattered less than climate and baseline fit.`
-    case "price_score":
-      return strategy === "aggressive"
-        ? `Market price looked ${scoreText}. Price was only ${weightText}, but the upside still helped this crop win on reward.`
-        : `Market price looked ${scoreText}. It counted as ${weightText} in the risk formula, so it supported the result without being the main driver.`
-    case "budget_fit_score":
-      return strategy === "aggressive"
-        ? `Budget fit looked ${scoreText} and was ${weightText}, so this crop keeps enough financial headroom while still chasing upside.`
-        : `Budget fit looked ${scoreText} and was ${weightText}, helping keep the capital burden manageable for the safer option.`
-    case "suitability_score":
-      return score > 0
-        ? strategy === "aggressive"
-          ? `Baseline suitability looked ${scoreText} and was ${weightText}, so the crop still clears the agronomic checks while maximizing reward.`
-          : `Baseline suitability looked ${scoreText} and was ${weightText}, making agronomic reliability one of the strongest reasons this crop has the lowest risk.`
-        : `Baseline suitability looked ${scoreText}, so this crop is being carried mostly by the other weighted factors.`
-    default:
-      return `${metric} looked ${scoreText} and counted as ${weightText} in the ${strategy} formula.`
+  return {
+    metric: "climate_score",
+    label: "Climate",
+    weight: STRATEGY_WEIGHTS[strategy].climate_score,
+    score: crop.score_breakdown.climate_score,
+    signal: climateSignal.signal,
+    summary: climateSignal.summary,
   }
 }
 
-function buildStrategyExplanationPoints(strategy: StrategyKey, crop: RankedCrop) {
-  const weights = STRATEGY_WEIGHTS[strategy]
-  const contributions = (Object.entries(weights) as Array<[keyof RankedCrop["score_breakdown"], number]>)
-    .map(([metric, weight]) => ({
-      metric,
-      weight,
-      score: crop.score_breakdown[metric],
-      contribution: crop.score_breakdown[metric] * weight,
-    }))
-    .sort((a, b) => b.contribution - a.contribution)
+function buildBudgetMetric(strategy: StrategyKey, crop: RankedCrop): StrategyMetric {
+  const tone = getMetricTone(crop.score_breakdown.budget_fit_score)
 
-  return contributions
-    .slice(0, 3)
-    .map((item) => buildMetricExplanation(strategy, item.metric, item.score, item.weight))
+  return {
+    metric: "budget_fit_score",
+    label: "Budget",
+    weight: STRATEGY_WEIGHTS[strategy].budget_fit_score,
+    score: crop.score_breakdown.budget_fit_score,
+    signal: `Budget-fit score: ${(crop.score_breakdown.budget_fit_score * 100).toFixed(0)} / 100`,
+    summary: "This reflects how much financial headroom remains after the crop’s minimum cost profile.",
+    effect:
+      strategy === "conservative"
+        ? "Budget still matters in the safer plan because expensive crops can add execution risk."
+        : "Budget matters less than price upside here, but weak headroom still drags the score.",
+    tone,
+  }
+}
+
+function buildSuitabilityMetric(strategy: StrategyKey, crop: RankedCrop): StrategyMetric {
+  const tone = getMetricTone(crop.score_breakdown.suitability_score)
+
+  return {
+    metric: "suitability_score",
+    label: "Suitability",
+    weight: STRATEGY_WEIGHTS[strategy].suitability_score,
+    score: crop.score_breakdown.suitability_score,
+    signal:
+      crop.score_breakdown.suitability_score >= 1
+        ? "Baseline agronomic fit is strong"
+        : crop.score_breakdown.suitability_score >= 0.6
+          ? "Baseline agronomic fit is marginal"
+          : "Baseline agronomic fit is weak",
+    summary: "This captures whether the crop broadly matches the farm and forecast constraints before ranking strategy is applied.",
+    effect:
+      strategy === "conservative"
+        ? "This is one of the largest safety weights, so poor fit is costly."
+        : "This remains important, but it supports upside rather than defining the plan on its own.",
+    tone,
+  }
+}
+
+function buildDurationMetric(
+  strategy: StrategyKey,
+  crop: RankedCrop,
+  recommendation: RecommendationResponse | null,
+): StrategyMetric {
+  const tone = getMetricTone(crop.score_breakdown.duration_fit_score)
+  const harvestPreference = recommendation?.user_preferences?.harvest_preference
+
+  return {
+    metric: "duration_fit_score",
+    label: "Harvest Speed",
+    weight: STRATEGY_WEIGHTS[strategy].duration_fit_score,
+    score: crop.score_breakdown.duration_fit_score,
+    signal: `Growth cycle: ${crop.growth_days} days`,
+    summary: harvestPreference
+      ? `The user preference is set to ${harvestPreference}, so crop duration is being scored directly.`
+      : "No harvest-speed preference was set, so duration is mostly neutral.",
+    effect:
+      strategy === "aggressive"
+        ? "This can help separate upside crops, but it is still a smaller signal than price."
+        : "This is a minor tiebreaker in the conservative plan.",
+    tone,
+  }
+}
+
+function buildPriceMetricCompact(strategy: StrategyKey, crop: RankedCrop): StrategyMetric {
+  const trendSignal =
+    crop.price_result.trend === "UP"
+      ? "Future trend up"
+      : crop.price_result.trend === "DOWN"
+        ? "Future trend down"
+        : "Future trend stable"
+
+  return {
+    metric: "price_score",
+    label: "Price",
+    weight: STRATEGY_WEIGHTS[strategy].price_score,
+    score: crop.score_breakdown.price_score,
+    signal: `${trendSignal}: ${formatSignedPercent(crop.price_result.pct_change)}`,
+    summary: `RM ${crop.price_result.current_price.toFixed(2)} now, RM ${crop.price_result.predicted_price.toFixed(2)} predicted.`,
+  }
+}
+
+function buildClimateMetricCompact(
+  strategy: StrategyKey,
+  crop: RankedCrop,
+  recommendation: RecommendationResponse | null,
+): StrategyMetric {
+  const climateSignal = describeClimateSignal(selectForecastBlock(recommendation?.climate_output, crop))
+
+  return {
+    metric: "climate_score",
+    label: "Climate",
+    weight: STRATEGY_WEIGHTS[strategy].climate_score,
+    score: crop.score_breakdown.climate_score,
+    signal: climateSignal.signal,
+    summary: climateSignal.summary,
+  }
+}
+
+function buildBudgetMetricCompact(strategy: StrategyKey, crop: RankedCrop): StrategyMetric {
+  return {
+    metric: "budget_fit_score",
+    label: "Budget",
+    weight: STRATEGY_WEIGHTS[strategy].budget_fit_score,
+    score: crop.score_breakdown.budget_fit_score,
+    signal: `Budget coverage: ${(crop.score_breakdown.budget_fit_score * 100).toFixed(0)}%`,
+    summary: "Higher means the budget can cover more of the crop's minimum cost.",
+  }
+}
+
+function buildSuitabilityMetricCompact(strategy: StrategyKey, crop: RankedCrop): StrategyMetric {
+  return {
+    metric: "suitability_score",
+    label: "Suitability",
+    weight: STRATEGY_WEIGHTS[strategy].suitability_score,
+    score: crop.score_breakdown.suitability_score,
+    signal:
+      crop.score_breakdown.suitability_score >= 1
+        ? "Baseline agronomic fit is strong"
+        : crop.score_breakdown.suitability_score >= 0.6
+          ? "Baseline agronomic fit is marginal"
+          : "Baseline agronomic fit is weak",
+    summary: "Higher means the crop fits the farm and forecast conditions better.",
+  }
+}
+
+function buildDurationMetricCompact(strategy: StrategyKey, crop: RankedCrop): StrategyMetric {
+  return {
+    metric: "duration_fit_score",
+    label: "Harvest Speed",
+    weight: STRATEGY_WEIGHTS[strategy].duration_fit_score,
+    score: crop.score_breakdown.duration_fit_score,
+    signal: `Growth cycle: ${crop.growth_days} days`,
+    summary: "Shorter growth cycles score higher.",
+  }
+}
+
+function buildStrategyExplanationMetrics(
+  strategy: StrategyKey,
+  crop: RankedCrop,
+  recommendation: RecommendationResponse | null,
+) {
+  const metrics: StrategyMetric[] = [
+    buildPriceMetricCompact(strategy, crop),
+    buildClimateMetricCompact(strategy, crop, recommendation),
+    buildSuitabilityMetricCompact(strategy, crop),
+    buildBudgetMetricCompact(strategy, crop),
+    buildDurationMetricCompact(strategy, crop),
+  ]
+
+  return metrics.sort((left, right) => (right.score * right.weight) - (left.score * left.weight))
+}
+
+function getMetricIcon(metric: MetricKey) {
+  switch (metric) {
+    case "price_score":
+      return TrendingUp
+    case "climate_score":
+      return CloudRain
+    case "budget_fit_score":
+      return Wallet
+    case "duration_fit_score":
+      return Clock3
+    case "suitability_score":
+    default:
+      return CheckCircle2
+  }
 }
 
 function buildStrategyCards(recommendation: RecommendationResponse | null): StrategyRecommendationCard[] {
@@ -234,30 +437,38 @@ function buildStrategyCards(recommendation: RecommendationResponse | null): Stra
 
   const rankedCrops = recommendation.ranked_crops || []
   const aggressiveCrop =
-    pickHighestRewardCrop(rankedCrops) || recommendation.aggressive_plan?.top_crop || null
+    recommendation.aggressive_plan?.top_crop || pickHighestRewardCrop(rankedCrops) || null
   const conservativeCrop =
-    pickLowestRiskCrop(rankedCrops, aggressiveCrop?.crop_id) || recommendation.conservative_plan?.top_crop || null
+    recommendation.conservative_plan?.top_crop ||
+    pickLowestRiskCrop(rankedCrops, aggressiveCrop?.crop_id) ||
+    null
 
-  if (!aggressiveCrop || !conservativeCrop) {
+  const plans = [
+    aggressiveCrop
+      ? {
+          strategy: "aggressive" as const,
+          topCrop: aggressiveCrop,
+          rationale:
+            recommendation.aggressive_plan?.rationale ||
+            "Selected for the highest reward potential, prioritizing faster harvests and stronger upside.",
+        }
+      : null,
+    conservativeCrop
+      ? {
+          strategy: "conservative" as const,
+          topCrop: conservativeCrop,
+          rationale:
+            recommendation.conservative_plan?.rationale ||
+            "Selected for the lowest overall risk, prioritizing climate stability and dependable fit.",
+        }
+      : null,
+  ].filter((plan): plan is NonNullable<typeof plan> => plan !== null)
+
+  if (!plans.length) {
     return []
   }
 
-  return [
-    {
-      strategy: "aggressive" as const,
-      topCrop: aggressiveCrop,
-      rationale:
-        recommendation.aggressive_plan?.rationale ||
-        "Selected for the highest reward potential, prioritizing faster harvests and stronger upside.",
-    },
-    {
-      strategy: "conservative" as const,
-      topCrop: conservativeCrop,
-      rationale:
-        recommendation.conservative_plan?.rationale ||
-        "Selected for the lowest overall risk, prioritizing climate stability and dependable fit.",
-    },
-  ].map((plan) => {
+  return plans.map((plan) => {
     const strategy = plan.strategy
 
     return {
@@ -265,11 +476,13 @@ function buildStrategyCards(recommendation: RecommendationResponse | null): Stra
       strategyLabel: strategy === "aggressive" ? "Aggressive Plan" : "Conservative Plan",
       cropId: plan.topCrop.crop_id,
       cropName: plan.topCrop.crop_name,
+      topCrop: plan.topCrop,
       icon: getCropIcon(plan.topCrop.crop_id, plan.topCrop.crop_name),
+      score: strategy === "aggressive" ? plan.topCrop.aggressive_score : plan.topCrop.conservative_score,
       price: formatCurrency(plan.topCrop.price_result.predicted_price),
       growthCycle: `${plan.topCrop.growth_days} days`,
       rationale: plan.rationale,
-      explanationPoints: buildStrategyExplanationPoints(strategy, plan.topCrop),
+      explanationMetrics: buildStrategyExplanationMetrics(strategy, plan.topCrop, recommendation),
     }
   })
 }
@@ -294,6 +507,9 @@ function getMockSeriesKey(cropId: string) {
   if (key.includes("rice")) {
     return "rice"
   }
+  if (key.includes("tomato")) {
+    return "tomato"
+  }
   if (
     key.includes("chili") ||
     key.includes("okra") ||
@@ -312,6 +528,10 @@ function PlanningPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const runIdParam = searchParams.get("runId")
+  const draftAreaText = searchParams.get("area_text")
+  const draftBudgetText = searchParams.get("budget_text")
+  const draftLocationText = searchParams.get("location_text")
+  const draftSoilTypeText = searchParams.get("soil_type_text")
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyKey>("aggressive")
   const [recommendation, setRecommendation] = useState<RecommendationResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -336,8 +556,7 @@ function PlanningPageContent() {
       setIsLoading(true)
       setLoadError(null)
 
-      const targetRunId = runIdParam || getLatestRecommendationRunId()
-      if (!targetRunId) {
+      if (!runIdParam && !draftAreaText && !draftBudgetText && !draftLocationText && !draftSoilTypeText) {
         if (isActive) {
           setRecommendation(null)
           setIsLoading(false)
@@ -346,20 +565,26 @@ function PlanningPageContent() {
         return
       }
 
-      let nextRecommendation = getStoredRecommendationPlan(targetRunId)
-
-      if (!nextRecommendation) {
-        try {
-          nextRecommendation = await getRecommendation(targetRunId)
-          saveRecommendationPlan(nextRecommendation)
-        } catch (error) {
-          if (isActive) {
-            setRecommendation(null)
-            setIsLoading(false)
-            setLoadError(getRecommendationErrorMessage(error))
-          }
-          return
+      let nextRecommendation: RecommendationResponse
+      try {
+        if (runIdParam) {
+          nextRecommendation = await getRecommendation(runIdParam)
+        } else {
+          nextRecommendation = await createPreviewRecommendation({
+            area_text: draftAreaText,
+            budget_text: draftBudgetText,
+            location_text: draftLocationText,
+            notes: null,
+            soil_type_text: draftSoilTypeText,
+          })
         }
+      } catch (error) {
+        if (isActive) {
+          setRecommendation(null)
+          setIsLoading(false)
+          setLoadError(getRecommendationErrorMessage(error))
+        }
+        return
       }
 
       if (!isActive) {
@@ -375,7 +600,7 @@ function PlanningPageContent() {
     return () => {
       isActive = false
     }
-  }, [runIdParam])
+  }, [draftAreaText, draftBudgetText, draftLocationText, draftSoilTypeText, runIdParam])
 
   useEffect(() => {
     const availableStrategies = buildStrategyCards(recommendation).map((card) => card.strategy)
@@ -405,32 +630,23 @@ function PlanningPageContent() {
 
   const handlePlanAssistantSubmit = async (messageOverride?: string) => {
     const outgoingMessage = (messageOverride ?? chatInput).trim()
-    if (!outgoingMessage) {
+    if (!outgoingMessage || !recommendation) {
       return
     }
 
-    const activeRunId = recommendation?.run_id ?? runIdParam ?? getLatestRecommendationRunId()
-    if (!activeRunId) {
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          role: "bot",
-          content: "I need a saved plan before I can tune recommendations. Generate a plan first, then I can help refine it.",
-        },
-      ])
-      return
-    }
+    const activeRunId = recommendation?.run_id ?? runIdParam
 
     setChatInput("")
     setChatMessages((prev) => [...prev, { role: "user", content: outgoingMessage }])
     setIsChatLoading(true)
 
     try {
-      const response = await sendRecommendationChatMessage(activeRunId, outgoingMessage)
+      const response = activeRunId
+        ? await sendRecommendationChatMessage(activeRunId, outgoingMessage)
+        : await sendPreviewRecommendationChatMessage(recommendation, outgoingMessage)
       const nextRecommendation = response.updated_recommendation
 
       if (nextRecommendation) {
-        saveRecommendationPlan(nextRecommendation)
         setRecommendation(nextRecommendation)
       }
 
@@ -454,6 +670,41 @@ function PlanningPageContent() {
     }
   }
 
+  const handleGenerateExecutionPlan = async () => {
+    if (!selectedRecommendation) {
+      return
+    }
+
+    if (recommendation?.run_id) {
+      router.push(`/execution-plan?crop=${selectedRecommendation.cropId}`)
+      return
+    }
+
+    if (!draftAreaText && !draftBudgetText && !draftLocationText && !draftSoilTypeText) {
+      setLoadError("We could not find the draft farm data to save. Please generate the recommendation again.")
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      setLoadError(null)
+      const persistedRecommendation = await createRecommendation({
+        area_text: draftAreaText,
+        budget_text: draftBudgetText,
+        location_text: draftLocationText,
+        notes: null,
+        soil_type_text: draftSoilTypeText,
+      })
+
+      setRecommendation(persistedRecommendation)
+      router.push(`/execution-plan?crop=${selectedRecommendation.cropId}`)
+    } catch (error) {
+      setLoadError(getRecommendationErrorMessage(error))
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const strategyRecommendations = buildStrategyCards(recommendation)
   const selectedRecommendation =
     strategyRecommendations.find((card) => card.strategy === selectedStrategy) || strategyRecommendations[0]
@@ -463,14 +714,7 @@ function PlanningPageContent() {
   const mockSeriesKey = getMockSeriesKey(selectedRecommendation?.cropId || "wheat")
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="h-12 w-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
-          <p className="text-muted-foreground">Loading your saved recommendation...</p>
-        </div>
-      </div>
-    )
+    return <PaddyFieldLoadingScreen />
   }
 
   return (
@@ -615,17 +859,62 @@ function PlanningPageContent() {
                                 <p className="text-xs text-muted-foreground">Est. Price</p>
                                 <p className="text-sm font-medium text-primary">{card.price}</p>
                               </div>
+                              <div>
+                                <p className="text-xs text-muted-foreground">Score</p>
+                                <p className="text-sm font-medium text-foreground">
+                                  {(card.score * 100).toFixed(0)} / 100
+                                </p>
+                              </div>
                             </div>
                             <div className="mt-4 pt-4 border-t border-border/60">
                               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground mb-3">
                                 Why This Crop Won
                               </p>
-                              <div className="space-y-2">
-                                {card.explanationPoints.map((point) => (
-                                  <p key={point} className="text-sm text-muted-foreground leading-relaxed">
-                                    {point}
-                                  </p>
-                                ))}
+                              <p className="text-sm text-muted-foreground leading-relaxed">
+                                {card.rationale}
+                              </p>
+                              <div className="mt-4 space-y-3">
+                                {card.explanationMetrics.map((item, index) => {
+                                  const Icon = getMetricIcon(item.metric)
+
+                                  return (
+                                    <div
+                                      key={`${card.strategy}-${item.metric}`}
+                                      className="rounded-2xl border border-border bg-muted/30 p-4"
+                                    >
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-center gap-3">
+                                          <div className="rounded-xl bg-primary/10 p-2">
+                                            <Icon className="h-4 w-4 text-primary" />
+                                          </div>
+                                          <div>
+                                            <p className="text-sm font-semibold text-foreground">
+                                              {index + 1}. {item.label}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                              Score {(item.score * 100).toFixed(0)} / 100
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                                          {Math.round(item.weight * 100)}% weight
+                                        </span>
+                                      </div>
+
+                                      <div className="mt-4 h-2 overflow-hidden rounded-full bg-primary/10">
+                                        <div
+                                          className="h-full rounded-full bg-primary"
+                                          style={{ width: `${Math.max(8, Math.round(item.score * 100))}%` }}
+                                        />
+                                      </div>
+
+                                      <div className="mt-4 space-y-2">
+                                        <p className="text-sm font-medium text-foreground">{item.signal}</p>
+                                        <p className="text-sm leading-relaxed text-muted-foreground">{item.summary}</p>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
                               </div>
                             </div>
                           </button>
@@ -646,57 +935,11 @@ function PlanningPageContent() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <Tabs defaultValue="profit" className="w-full">
-                      <TabsList className="grid w-full grid-cols-3 mb-4">
-                        <TabsTrigger value="profit">Profit</TabsTrigger>
+                    <Tabs defaultValue="yield" className="w-full">
+                      <TabsList className="grid w-full grid-cols-2 mb-4">
                         <TabsTrigger value="yield">Yield</TabsTrigger>
                         <TabsTrigger value="risk">Risk</TabsTrigger>
                       </TabsList>
-                      <TabsContent value="profit" className="space-y-4">
-                        <div className="h-64">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={marketData}>
-                              <defs>
-                                <linearGradient id="profitGradient" x1="0" y1="0" x2="0" y2="1">
-                                  <stop offset="5%" stopColor="var(--color-primary)" stopOpacity={0.3} />
-                                  <stop offset="95%" stopColor="var(--color-primary)" stopOpacity={0} />
-                                </linearGradient>
-                              </defs>
-                              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                              <XAxis dataKey="month" className="text-xs" />
-                              <YAxis className="text-xs" />
-                              <Tooltip
-                                contentStyle={{
-                                  backgroundColor: "var(--color-card)",
-                                  borderColor: "var(--color-border)",
-                                  borderRadius: "8px",
-                                }}
-                              />
-                              <Area
-                                type="monotone"
-                                dataKey={mockSeriesKey}
-                                stroke="var(--color-primary)"
-                                fill="url(#profitGradient)"
-                                strokeWidth={2}
-                              />
-                            </AreaChart>
-                          </ResponsiveContainer>
-                        </div>
-                        <div className="grid grid-cols-3 gap-4">
-                          <div className="p-4 rounded-xl bg-muted/50">
-                            <p className="text-xs text-muted-foreground">Best Case</p>
-                            <p className="text-lg font-semibold text-primary">$5,200</p>
-                          </div>
-                          <div className="p-4 rounded-xl bg-muted/50">
-                            <p className="text-xs text-muted-foreground">Expected</p>
-                            <p className="text-lg font-semibold text-foreground">$3,200</p>
-                          </div>
-                          <div className="p-4 rounded-xl bg-muted/50">
-                            <p className="text-xs text-muted-foreground">Worst Case</p>
-                            <p className="text-lg font-semibold text-muted-foreground">$1,800</p>
-                          </div>
-                        </div>
-                      </TabsContent>
                       <TabsContent value="yield" className="space-y-4">
                         <div className="h-64">
                           <ResponsiveContainer width="100%" height="100%">
@@ -814,7 +1057,9 @@ function PlanningPageContent() {
                     Plan Assistant
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Tune your crop recommendation with chat
+                    {recommendation?.run_id
+                      ? "Tune your crop recommendation with chat"
+                      : "Tune this preview without saving it yet."}
                   </CardDescription>
                 </div>
               </CardHeader>
@@ -832,7 +1077,7 @@ function PlanningPageContent() {
                         variant="outline"
                         size="sm"
                         className="h-8 text-xs"
-                        disabled={isChatLoading || !recommendation?.run_id}
+                        disabled={isChatLoading || !recommendation}
                         onClick={() => void handlePlanAssistantSubmit(prompt)}
                       >
                         {prompt}
@@ -901,13 +1146,13 @@ function PlanningPageContent() {
                       className="flex-1 h-10 text-sm focus-visible:ring-1"
                       value={chatInput}
                       onChange={(event) => setChatInput(event.target.value)}
-                      disabled={isChatLoading || !recommendation?.run_id}
+                      disabled={isChatLoading || !recommendation}
                     />
                     <Button
                       type="submit"
                       size="icon"
                       className="shrink-0 h-10 w-10 transition-all hover:scale-105"
-                      disabled={!chatInput.trim() || isChatLoading || !recommendation?.run_id}
+                      disabled={!chatInput.trim() || isChatLoading || !recommendation}
                     >
                       <Send className="h-4 w-4" />
                     </Button>
@@ -917,7 +1162,7 @@ function PlanningPageContent() {
             </Card>
 
             <Button
-              onClick={() => router.push(`/execution-plan?crop=${selectedRecommendation?.cropId || ""}`)}
+              onClick={() => void handleGenerateExecutionPlan()}
               className="w-full h-12 gap-2 text-base"
               disabled={!hasRecommendationData || !selectedRecommendation}
             >
@@ -934,14 +1179,7 @@ function PlanningPageContent() {
 export default function PlanningPage() {
   return (
     <Suspense
-      fallback={
-        <div className="min-h-screen bg-background flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <div className="h-12 w-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
-            <p className="text-muted-foreground">Loading your saved recommendation...</p>
-          </div>
-        </div>
-      }
+      fallback={<PaddyFieldLoadingScreen />}
     >
       <PlanningPageContent />
     </Suspense>
