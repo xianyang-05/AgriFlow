@@ -30,7 +30,11 @@ def test_suitability_rules_fire_for_correct_reasons(climate_output):
     budget_result = service.evaluate_crop(budget_fail_crop, normalized, climate_output)
     success_result = service.evaluate_crop(success_crop, normalized, climate_output)
 
-    assert rainfall_result.reason == "rainfall outside crop tolerance"
-    assert month_result.reason == "target month not in planting window"
-    assert budget_result.reason == "budget below minimum viable cost"
+    assert rainfall_result.suitable is True
+    assert rainfall_result.marginal is True
+    assert "below crop minimum" in rainfall_result.reason
+    assert month_result.suitable is True
+    assert month_result.marginal is True
+    assert "target month (4) not in planting window [6]" == month_result.reason
+    assert budget_result.suitable is True
     assert success_result.suitable is True

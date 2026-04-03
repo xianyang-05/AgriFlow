@@ -1,4 +1,5 @@
 from app.adapters.climate_model_adapter import ClimateModelAdapter
+from app.exceptions import ClimateError
 from app.logging_config import update_request_logging
 from app.schemas.climate import ClimateOutput, ClimateRequest, ForecastBlock
 from app.schemas.crop import CropRecord
@@ -10,9 +11,12 @@ class ClimateService:
         self.adapter = adapter or ClimateModelAdapter()
 
     def get_output(self, normalized_input: NormalizedFarmInput) -> ClimateOutput:
+        if normalized_input.latitude is None or normalized_input.longitude is None:
+            raise ClimateError("Climate request requires resolved coordinates")
+
         request = ClimateRequest(
-            lat=normalized_input.latitude or 0.0,
-            lon=normalized_input.longitude or 0.0,
+            lat=normalized_input.latitude,
+            lon=normalized_input.longitude,
             target_month=normalized_input.target_month or 1,
             horizon_months=normalized_input.forecast_horizon_months or 3,
         )
@@ -39,27 +43,34 @@ class ClimateService:
         )
         penalty = 0.0
         if crop.drought_sensitive and block.dry_risk > 0.30:
-            penalty += 0.20
+            penalty += self._scaled_risk_penalty(block.dry_risk, threshold=0.30)
         if crop.flood_sensitive and block.wet_risk > 0.35:
-            penalty += 0.20
+            penalty += self._scaled_risk_penalty(block.wet_risk, threshold=0.35)
         return max(0.0, min(1.0, rainfall_score - penalty))
 
     def summarize(self, climate_output: ClimateOutput | None) -> str:
         if not climate_output or not climate_output.forecast_blocks:
             return "Climate outlook unavailable."
-        first = climate_output.forecast_blocks[0]
-        last = climate_output.forecast_blocks[-1]
+        average_rainfall = sum(block.predicted_rain_mm for block in climate_output.forecast_blocks) / len(
+            climate_output.forecast_blocks
+        )
         return (
-            f"Rainfall is projected between {first.predicted_rain_mm:.0f}mm and "
-            f"{last.predicted_rain_mm:.0f}mm across {climate_output.forecast_horizon_months} months."
+            f"Average projected rainfall is {average_rainfall:.0f}mm across "
+            f"{climate_output.forecast_horizon_months} months."
         )
 
     def _rainfall_score(self, predicted_rainfall: float, minimum: float, maximum: float) -> float:
         if minimum <= predicted_rainfall <= maximum:
             midpoint = (minimum + maximum) / 2
             half_span = max((maximum - minimum) / 2, 1.0)
-            return max(0.5, 1.0 - abs(predicted_rainfall - midpoint) / half_span)
+            return max(0.0, 1.0 - abs(predicted_rainfall - midpoint) / half_span)
 
         if predicted_rainfall < minimum:
             return max(0.0, 1.0 - ((minimum - predicted_rainfall) / max(minimum, 1.0)))
         return max(0.0, 1.0 - ((predicted_rainfall - maximum) / max(maximum, 1.0)))
+
+    def _scaled_risk_penalty(self, risk: float, threshold: float, max_penalty: float = 0.20) -> float:
+        if risk <= threshold:
+            return 0.0
+
+        return min(max_penalty, ((risk - threshold) / max(1.0 - threshold, 1e-6)) * max_penalty)

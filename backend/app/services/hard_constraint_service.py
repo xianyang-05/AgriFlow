@@ -11,20 +11,14 @@ class HardConstraintService:
         normalized_input: NormalizedFarmInput,
         user_preferences: UserPreferences,
     ) -> tuple[list[CropRecord], list[EliminationReason]]:
-        suitability_map = {result.crop_id: result for result in suitability_results}
         eligible: list[CropRecord] = []
         eliminated: list[EliminationReason] = []
+        preferred_crop_ids = set(user_preferences.preferred_crops)
 
         for crop in crops:
-            suitability = suitability_map[crop.id]
-            crop_min_cost = crop.min_budget_per_m2 * (normalized_input.area_m2 or 0.0)
-
-            if not suitability.suitable:
-                eliminated.append(EliminationReason(crop_id=crop.id, reason=suitability.reason))
-                continue
-            if (normalized_input.budget_myr or 0.0) < crop_min_cost:
+            if preferred_crop_ids and crop.id not in preferred_crop_ids:
                 eliminated.append(
-                    EliminationReason(crop_id=crop.id, reason="budget below minimum viable cost")
+                    EliminationReason(crop_id=crop.id, reason="crop not included in the user's selected crop list")
                 )
                 continue
             if crop.id in user_preferences.excluded_crops:

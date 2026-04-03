@@ -11,15 +11,23 @@ recommendation_service = RecommendationService()
 
 
 @router.post("", response_model=RecommendationResponse)
-def create_recommendation(
+async def create_recommendation(
     payload: RawInput,
     db: Session = Depends(get_db),
 ) -> RecommendationResponse:
     return recommendation_service.create_recommendation(db, payload)
 
 
+@router.post("/preview", response_model=RecommendationResponse)
+async def preview_recommendation(
+    payload: RawInput,
+    db: Session = Depends(get_db),
+) -> RecommendationResponse:
+    return recommendation_service.preview_recommendation(db, payload)
+
+
 @router.get("/{run_id}", response_model=RecommendationResponse)
-def get_recommendation(
+async def get_recommendation(
     run_id: str,
     db: Session = Depends(get_db),
 ) -> RecommendationResponse:
@@ -27,7 +35,7 @@ def get_recommendation(
 
 
 @router.post("/{run_id}/revert", response_model=RecommendationResponse)
-def revert_recommendation(
+async def revert_recommendation(
     run_id: str,
     db: Session = Depends(get_db),
 ) -> RecommendationResponse:
