@@ -1,0 +1,152 @@
+[
+  {
+    "id": 0,
+    "name": "Pepper__bell___Bacterial_spot",
+    "displayName": "Pepper bell  Bacterial spot",
+    "crop": "Pepper",
+    "severity": "medium",
+    "treatment": "Apply specific fungicide/bactericide.",
+    "prevention": "Remove infected leaves.",
+    "isHealthy": false
+  },
+  {
+    "id": 1,
+    "name": "Pepper__bell___healthy",
+    "displayName": "Pepper bell  healthy",
+    "crop": "Pepper",
+    "severity": "none",
+    "treatment": "N/A",
+    "prevention": "Ensure good airflow and watering.",
+    "isHealthy": true
+  },
+  {
+    "id": 2,
+    "name": "Potato___Early_blight",
+    "displayName": "Potato  Early blight",
+    "crop": "Potato",
+    "severity": "medium",
+    "treatment": "Apply specific fungicide/bactericide.",
+    "prevention": "Remove infected leaves.",
+    "isHealthy": false
+  },
+  {
+    "id": 3,
+    "name": "Potato___Late_blight",
+    "displayName": "Potato  Late blight",
+    "crop": "Potato",
+    "severity": "medium",
+    "treatment": "Apply specific fungicide/bactericide.",
+    "prevention": "Remove infected leaves.",
+    "isHealthy": false
+  },
+  {
+    "id": 4,
+    "name": "Potato___healthy",
+    "displayName": "Potato  healthy",
+    "crop": "Potato",
+    "severity": "none",
+    "treatment": "N/A",
+    "prevention": "Ensure good airflow and watering.",
+    "isHealthy": true
+  },
+  {
+    "id": 5,
+    "name": "Tomato_Bacterial_spot",
+    "displayName": "Tomato Bacterial spot",
+    "crop": "Tomato",
+    "severity": "medium",
+    "treatment": "Apply specific fungicide/bactericide.",
+    "prevention": "Remove infected leaves.",
+    "isHealthy": false
+  },
+  {
+    "id": 6,
+    "name": "Tomato_Early_blight",
+    "displayName": "Tomato Early blight",
+    "crop": "Tomato",
+    "severity": "medium",
+    "treatment": "Apply specific fungicide/bactericide.",
+    "prevention": "Remove infected leaves.",
+    "isHealthy": false
+  },
+  {
+    "id": 7,
+    "name": "Tomato_Late_blight",
+    "displayName": "Tomato Late blight",
+    "crop": "Tomato",
+    "severity": "medium",
+    "treatment": "Apply specific fungicide/bactericide.",
+    "prevention": "Remove infected leaves.",
+    "isHealthy": false
+  },
+  {
+    "id": 8,
+    "name": "Tomato_Leaf_Mold",
+    "displayName": "Tomato Leaf Mold",
+    "crop": "Tomato",
+    "severity": "medium",
+    "treatment": "Apply specific fungicide/bactericide.",
+    "prevention": "Remove infected leaves.",
+    "isHealthy": false
+  },
+  {
+    "id": 9,
+    "name": "Tomato_Septoria_leaf_spot",
+    "displayName": "Tomato Septoria leaf spot",
+    "crop": "Tomato",
+    "severity": "medium",
+    "treatment": "Apply specific fungicide/bactericide.",
+    "prevention": "Remove infected leaves.",
+    "isHealthy": false
+  },
+  {
+    "id": 10,
+    "name": "Tomato_Spider_mites_Two_spotted_spider_mite",
+    "displayName": "Tomato Spider mites Two spotted spider mite",
+    "crop": "Tomato",
+    "severity": "medium",
+    "treatment": "Apply specific fungicide/bactericide.",
+    "prevention": "Remove infected leaves.",
+    "isHealthy": false
+  },
+  {
+    "id": 11,
+    "name": "Tomato__Target_Spot",
+    "displayName": "Tomato Target Spot",
+    "crop": "Tomato",
+    "severity": "medium",
+    "treatment": "Apply specific fungicide/bactericide.",
+    "prevention": "Remove infected leaves.",
+    "isHealthy": false
+  },
+  {
+    "id": 12,
+    "name": "Tomato__Tomato_YellowLeaf__Curl_Virus",
+    "displayName": "Tomato Tomato YellowLeaf Curl Virus",
+    "crop": "Tomato",
+    "severity": "medium",
+    "treatment": "Apply specific fungicide/bactericide.",
+    "prevention": "Remove infected leaves.",
+    "isHealthy": false
+  },
+  {
+    "id": 13,
+    "name": "Tomato__Tomato_mosaic_virus",
+    "displayName": "Tomato Tomato mosaic virus",
+    "crop": "Tomato",
+    "severity": "medium",
+    "treatment": "Apply specific fungicide/bactericide.",
+    "prevention": "Remove infected leaves.",
+    "isHealthy": false
+  },
+  {
+    "id": 14,
+    "name": "Tomato_healthy",
+    "displayName": "Tomato healthy",
+    "crop": "Tomato",
+    "severity": "none",
+    "treatment": "N/A",
+    "prevention": "Ensure good airflow and watering.",
+    "isHealthy": true
+  }
+]
