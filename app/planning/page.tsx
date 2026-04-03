@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { Suspense, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -346,7 +346,9 @@ function PlanningPageContent() {
         return
       }
 
-      let nextRecommendation = getStoredRecommendationPlan(targetRunId)
+      // Skip cached plans that aren't complete so the backend can retry
+      const cachedPlan = getStoredRecommendationPlan(targetRunId)
+      let nextRecommendation = cachedPlan?.status === "complete" ? cachedPlan : null
 
       if (!nextRecommendation) {
         try {

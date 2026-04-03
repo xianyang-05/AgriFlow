@@ -1,4 +1,5 @@
 from app.exceptions import AltitudeError, ClimateError, GeocodingError, NormalizationError
+from app.schemas.climate import ClimateOutput, ForecastBlock
 from app.logging_config import update_request_logging
 from app.repositories.crop_repository import CropRepository
 from app.repositories.run_repository import RunRepository
@@ -160,9 +161,8 @@ class RecommendationService:
         try:
             pipeline.climate_output = self.climate_service.get_output(pipeline.normalized_input)
         except ClimateError as exc:
-            pipeline.status = "incomplete"
             pipeline.warnings.extend(exc.warnings)
-            return self._build_response(run_id, pipeline)
+            pipeline.climate_output = self._build_fallback_climate(pipeline.normalized_input)
 
         crops = [
             CropRecord.model_validate(crop)
@@ -257,4 +257,38 @@ class RecommendationService:
                 pipeline.normalized_input.clarification_questions if pipeline.normalized_input else []
             ),
             has_previous_version=False,
+        )
+
+    def _build_fallback_climate(self, normalized_input: NormalizedFarmInput) -> ClimateOutput:
+        """Create a neutral climate output when the real model is unavailable.
+
+        Uses moderate rainfall and equal risk distribution so that downstream
+        scoring still works but climate_score contributes a conservative,
+        non-discriminating signal.
+        """
+        target_month = normalized_input.target_month or 1
+        horizon = normalized_input.forecast_horizon_months or 3
+        blocks = []
+        for h in range(1, horizon + 1):
+            blocks.append(
+                ForecastBlock(
+                    horizon_months=h,
+                    predicted_rain_mm=200.0,
+                    rain_p10=160.0,
+                    rain_p50=200.0,
+                    rain_p90=240.0,
+                    dry_risk=0.33,
+                    normal_risk=0.34,
+                    wet_risk=0.33,
+                )
+            )
+        return ClimateOutput(
+            model_type="fallback",
+            request_location={
+                "lat": normalized_input.latitude or 0.0,
+                "lon": normalized_input.longitude or 0.0,
+            },
+            target_month=target_month,
+            forecast_horizon_months=horizon,
+            forecast_blocks=blocks,
         )
