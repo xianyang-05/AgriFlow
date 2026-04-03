@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -7,8 +8,21 @@ import { Progress } from "@/components/ui/progress"
 import { 
   Cloud, Sun, CloudRain, Droplets, ThermometerSun, Wind, 
   AlertTriangle, CheckCircle2, ArrowRight, Waves, Flame,
-  CloudSun, Snowflake
+  CloudSun, Snowflake, Loader2, ShieldAlert, ChevronRight
 } from "lucide-react"
+import dynamic from "next/dynamic"
+
+const InsurancePdfButton = dynamic(() => import("./InsurancePdfButton"), {
+  ssr: false,
+})
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import {
   LineChart,
   Line,
@@ -149,6 +163,84 @@ const getRiskBg = (status: string) => {
 
 export default function ClimatePage() {
   const today = forecastData[0]
+  const fallbackSeasonalData = [
+    { month: "2026-04", rainfall: 92 },
+    { month: "2026-05", rainfall: 118 },
+    { month: "2026-06", rainfall: 136 },
+    { month: "2026-07", rainfall: 128 },
+    { month: "2026-08", rainfall: 101 },
+    { month: "2026-09", rainfall: 94 },
+  ]
+  const fallbackMaxRainfall = Math.max(...fallbackSeasonalData.map((entry) => entry.rainfall))
+
+  const [seasonalData, setSeasonalData] = useState<{ month: string; rainfall: number }[]>(fallbackSeasonalData)
+  const [floodRisk, setFloodRisk] = useState<"low" | "medium" | "high">("medium")
+  const [seasonalError, setSeasonalError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const applySeasonalRisk = (data: { month: string; rainfall: number }[]) => {
+      let maxMonthlyRain = 0
+
+      for (const entry of data) {
+        maxMonthlyRain = Math.max(maxMonthlyRain, entry.rainfall)
+      }
+
+      setSeasonalData(data)
+
+      if (maxMonthlyRain > 180) {
+        setFloodRisk("high")
+      } else if (maxMonthlyRain > 120) {
+        setFloodRisk("medium")
+      } else {
+        setFloodRisk("low")
+      }
+    }
+
+    async function fetchSeasonal() {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000)
+
+      try {
+        const res = await fetch("https://seasonal-api.open-meteo.com/v1/seasonal?latitude=3.15&longitude=101.67&daily=precipitation_sum&forecast_days=180&models=ecmwf_seas5_ensemble_mean", {
+          signal: controller.signal,
+        })
+        if (!res.ok) {
+          throw new Error(`Seasonal API returned ${res.status}`)
+        }
+        const data = await res.json()
+
+        if (!data?.daily?.time || !data?.daily?.precipitation_sum) {
+          throw new Error("Seasonal API response is missing daily forecast data")
+        }
+
+        // Aggregate daily precipitation_sum into months
+        const monthlyRainfall: Record<string, number> = {}
+        const dates = data.daily.time
+        const rains = data.daily.precipitation_sum
+
+        for (let i = 0; i < dates.length; i++) {
+          const date = dates[i]
+          const month = date.substring(0, 7) // YYYY-MM
+          const rain = rains[i] || 0
+          monthlyRainfall[month] = (monthlyRainfall[month] || 0) + rain
+        }
+
+        const aggregated = Object.entries(monthlyRainfall).map(([month, rainfall]) => ({
+          month,
+          rainfall: rainfall as number,
+        }))
+
+        applySeasonalRisk(aggregated.length > 0 ? aggregated : fallbackSeasonalData)
+        setSeasonalError(null)
+      } catch (err) {
+        console.error("Failed to fetch seasonal forecast", err)
+        applySeasonalRisk(fallbackSeasonalData)
+        setSeasonalError("Live seasonal forecast unavailable. Showing fallback outlook.")
+      }
+      clearTimeout(timeoutId)
+    }
+    fetchSeasonal()
+  }, [])
 
   return (
     <div className="min-h-screen bg-background">
@@ -355,6 +447,149 @@ export default function ClimatePage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Hydrological Forecast & Flood Risk */}
+            <Card className="relative overflow-hidden border-emerald-200/70 bg-gradient-to-br from-white via-emerald-50/40 to-sky-50/60 shadow-lg shadow-emerald-100/40">
+              {floodRisk === "high" && (
+                <div className="pointer-events-none absolute right-0 top-0 h-40 w-40 rounded-bl-full bg-destructive/5" />
+              )}
+              <div className="pointer-events-none absolute -left-16 top-12 h-32 w-32 rounded-full bg-emerald-200/20 blur-2xl" />
+              <CardHeader>
+                <div className="mb-3 flex items-center gap-3">
+                  <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${
+                    floodRisk === "high"
+                      ? "border-destructive/25 bg-destructive/10 text-destructive"
+                      : "border-emerald-200 bg-emerald-100/80 text-emerald-700"
+                  }`}>
+                    <ShieldAlert className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700/80">
+                      Climate Protection
+                    </div>
+                    <CardTitle className="text-xl">
+                      Flood Readiness & Crop Protection
+                    </CardTitle>
+                  </div>
+                </div>
+                <CardDescription className="max-w-2xl text-base leading-relaxed">
+                  A quick decision panel for flood exposure, drainage action, and crop insurance support for lowland farms.
+                </CardDescription>
+                <CardTitle className="hidden">
+                  <Waves className={`h-5 w-5 ${floodRisk === "high" ? "text-destructive" : "text-primary"}`} />
+                  Hydrological Forecast & Flood Risk 🌊
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <>
+                    {seasonalError && (
+                      <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-foreground">
+                        {seasonalError}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Flood Warning */}
+                      <div className={`rounded-2xl border p-5 shadow-sm ${floodRisk === "high" ? "border-destructive/30 bg-destructive/10" : "border-border bg-white/75"}`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <AlertTriangle className={`h-4 w-4 ${floodRisk === "high" ? "text-destructive" : "text-muted-foreground"}`} />
+                          <h4 className="font-semibold text-foreground">Flood Alert</h4>
+                        </div>
+                        {floodRisk === "high" ? (
+                          <p className="text-sm text-destructive font-medium">
+                            Heavy rain expected (&gt;{Math.max(...seasonalData.map(d => d.rainfall), fallbackMaxRainfall).toFixed(0)}mm) → Potential flooding → Recommend drainage
+                          </p>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">Standard rainfall expected. Routine monitoring advised.</p>
+                        )}
+                      </div>
+
+                      {/* Drainage Plan */}
+                      <div className="rounded-2xl border border-sky-200 bg-sky-50/80 p-5 shadow-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Waves className="h-4 w-4 text-sky-600" />
+                          <h4 className="font-semibold text-foreground">Drainage Response</h4>
+                        </div>
+                        <p className="text-sm text-foreground">
+                          {floodRisk === "high" ? "Activate secondary pumps by mid-month. Clean main canal immediately." : "Maintain normal drainage operations."}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Crop Loss Estimate */}
+                    <div className="rounded-2xl border border-border bg-white/80 p-5 shadow-sm">
+                      <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                        <ArrowRight className="h-4 w-4 text-warning" />
+                        Estimated Crop Exposure
+                      </h4>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-muted-foreground">Estimated Exposure</span>
+                        <span className="font-semibold text-destructive">{floodRisk === "high" ? "35%" : "5%"} at risk</span>
+                      </div>
+                      <Progress value={floodRisk === "high" ? 35 : 5} className="h-2 mb-2 bg-muted" aria-label="Crop Loss Progress" />
+                      <p className="text-xs text-muted-foreground text-right">
+                        Potential financial impact: <span className="font-semibold text-foreground">RM {floodRisk === "high" ? "12,500" : "1,800"}</span>
+                      </p>
+                    </div>
+
+                    {/* Insurance Advisory CTA */}
+                    {floodRisk === "high" && (
+                    <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-emerald-100/70 p-5">
+                        <div>
+                          <h4 className="font-semibold text-emerald-800">Recommended Protection Plan</h4>
+                          <p className="text-sm text-emerald-700/90">Secure subsidized crop cover before flood exposure rises further.</p>
+                        </div>
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+                              Explore Coverage
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[720px]">
+                            <DialogHeader>
+                              <DialogTitle className="flex items-center gap-2">
+                                <CheckCircle2 className="h-5 w-5 text-primary" />
+                                Enroll in Agrobank STTP
+                              </DialogTitle>
+                              <DialogDescription>
+                                High flood risk detected. Secure your crop with Malaysia's subsidized paddy insurance.
+                              </DialogDescription>
+                            </DialogHeader>
+                            
+                            <div className="space-y-4 py-4">
+                              <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Coverage</span>
+                                  <span className="font-medium">Flood, Drought, Pests</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Estimated Premium</span>
+                                  <span className="font-medium">RM 64.80 / ha</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Max Payout</span>
+                                  <span className="font-bold text-success">RM 3,000 / ha</span>
+                                </div>
+                              </div>
+                              
+                              <div className="text-xs text-muted-foreground">
+                                * Offline Registration required at your nearest Agrobank branch or PPK.
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col gap-2">
+                              <InsurancePdfButton />
+                              <Button variant="outline" onClick={() => window.open("https://www.agrobank.com.my", "_blank")} className="w-full">
+                                Find Nearest Branch
+                              </Button>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                    )}
+                </>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Right Column - Risk Indicators */}
@@ -436,6 +671,8 @@ export default function ClimatePage() {
                 </div>
               </CardContent>
             </Card>
+
+
           </div>
         </div>
       </div>
