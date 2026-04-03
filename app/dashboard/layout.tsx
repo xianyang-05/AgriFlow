@@ -47,11 +47,8 @@ export default function DashboardLayout({
               <div className="w-2 h-2 bg-[#c41e3a] rounded-sm" />
               <div className="w-2 h-2 bg-[#c41e3a] rounded-sm" />
             </div>
-            <span className="font-bold text-white tracking-tight">AGRITWIN</span>
+            <span className="font-bold text-white tracking-tight">AGRIFLOW</span>
           </Link>
-          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-cyan-400 to-cyan-600 flex items-center justify-center">
-            <span className="text-xs font-medium text-white">JD</span>
-          </div>
         </div>
 
         {/* Auto Scenes Section */}
@@ -88,33 +85,7 @@ export default function DashboardLayout({
           </div>
         </div>
 
-        {/* Settings Shortcuts */}
-        <div className="px-4 py-2">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-white/90 text-sm font-medium">Settings</span>
-            <span className="text-white/50 text-xs">Details</span>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-2">
-            {shortcuts.map((shortcut) => {
-              const Icon = shortcut.icon
-              return (
-                <button
-                  key={shortcut.name}
-                  className="flex flex-col items-start p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
-                >
-                  <Icon className="h-5 w-5 text-white/70 mb-2" />
-                  <span className="text-white/90 text-xs font-medium">{shortcut.name}</span>
-                  <span className="text-white/40 text-[10px]">{shortcut.updated}</span>
-                </button>
-              )
-            })}
-            <button className="flex flex-col items-center justify-center p-3 rounded-xl border border-dashed border-white/20 hover:border-white/40 transition-colors">
-              <Plus className="h-5 w-5 text-white/50" />
-              <span className="text-white/50 text-[10px] mt-1">Add Shortcut</span>
-            </button>
-          </div>
-        </div>
+
 
         {/* Navigation Links */}
         <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto mt-2">

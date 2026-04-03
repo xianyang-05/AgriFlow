@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -432,7 +432,7 @@ export default function PlanningPage() {
             <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center">
               <Leaf className="h-5 w-5 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-lg text-foreground">AgriTwin AI</span>
+            <span className="font-semibold text-lg text-foreground">AgriFlow</span>
           </Link>
           <Button onClick={() => router.push("/dashboard")} className="gap-2">
             <LayoutDashboard className="h-4 w-4" />
@@ -891,3 +891,4 @@ export default function PlanningPage() {
     </div>
   )
 }
+
