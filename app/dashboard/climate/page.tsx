@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Image from "next/image"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -148,7 +149,20 @@ const getRiskColor = (status: string) => {
   }
 }
 
-const getRiskBg = (status: string) => {
+const getRiskTrackBg = (status: string) => {
+  switch (status) {
+    case "high":
+      return "bg-destructive/20"
+    case "medium":
+      return "bg-warning/20"
+    case "low":
+      return "bg-success/20"
+    default:
+      return "bg-muted"
+  }
+}
+
+const getRiskIndicatorBg = (status: string) => {
   switch (status) {
     case "high":
       return "bg-destructive"
@@ -542,20 +556,20 @@ export default function ClimatePage() {
               </CardContent>
             </Card>
 
-            <Card className="relative overflow-hidden border border-emerald-200/70 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.98),_rgba(236,253,245,0.94)_42%,_rgba(239,246,255,0.92)_100%)] py-5 shadow-[0_24px_70px_rgba(16,185,129,0.10)]">
-              <div className="pointer-events-none absolute -top-24 right-[-6rem] h-72 w-72 rounded-full bg-emerald-200/25 blur-3xl" />
-              <div className="pointer-events-none absolute bottom-[-7rem] left-[-4rem] h-64 w-64 rounded-full bg-sky-200/20 blur-3xl" />
+            <Card className="relative overflow-hidden border border-rose-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.98),_rgba(254,242,242,0.96)_38%,_rgba(255,241,242,0.94)_70%,_rgba(255,247,237,0.92)_100%)] py-5 shadow-[0_24px_70px_rgba(239,68,68,0.10)]">
+              <div className="pointer-events-none absolute -top-24 right-[-6rem] h-72 w-72 rounded-full bg-rose-200/30 blur-3xl" />
+              <div className="pointer-events-none absolute bottom-[-7rem] left-[-4rem] h-64 w-64 rounded-full bg-orange-200/20 blur-3xl" />
               <CardHeader className="relative space-y-4 pb-2">
                 <div className="flex items-start gap-3">
                   <div className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-sm ${
                     floodRisk === "high"
                       ? "border-destructive/25 bg-destructive/10 text-destructive"
-                      : "border-emerald-200 bg-emerald-100/80 text-emerald-700"
+                      : "border-rose-200 bg-rose-100/80 text-rose-700"
                   }`}>
                     <ShieldAlert className="h-4 w-4" />
                   </div>
                   <div className="space-y-1">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-emerald-700/80">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.26em] text-rose-700/85">
                       Insurance Command Center
                     </div>
                     <CardTitle className="text-[clamp(1.45rem,2vw,1.95rem)] leading-tight">
@@ -574,90 +588,99 @@ export default function ClimatePage() {
                 )}
 
                 <div className="grid gap-3 xl:grid-cols-[220px_minmax(0,1fr)] xl:items-stretch">
-                  <div className="flex h-full flex-col rounded-[1.4rem] border border-white/80 bg-white/78 p-3.5 shadow-sm backdrop-blur-sm">
+                  <div className="flex h-full flex-col rounded-[1.4rem] border border-white/85 bg-white/82 p-3.5 shadow-sm backdrop-blur-sm">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-700/80">Policy Quick View</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-rose-700/85">Policy Quick View</div>
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
                           Compact decision and enrollment details.
                         </p>
                       </div>
-                      <Badge className={`w-fit px-2 py-0.5 text-[10px] ${
-                        floodRisk === "high"
-                          ? "border-destructive/25 bg-destructive/15 text-destructive"
-                          : "border-emerald-300/60 bg-emerald-50 text-emerald-800"
-                      }`}>
+                        <Badge className={`w-fit px-2 py-0.5 text-[10px] ${
+                          floodRisk === "high"
+                            ? "border-destructive/25 bg-destructive/15 text-destructive"
+                          : "border-rose-300/60 bg-rose-50 text-rose-800"
+                        }`}>
                         {floodRisk === "high" ? "Urgent" : "Ready"}
                       </Badge>
                     </div>
 
-                    <div className="mt-3 rounded-2xl border border-emerald-300/40 bg-emerald-50/70 p-3">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-800/70">Policy Decision</div>
-                      <div className="mt-1.5 text-sm font-semibold leading-6 text-emerald-950">
+                    <div className="mt-3 rounded-2xl border border-rose-300/40 bg-rose-50/75 p-3">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-rose-800/75">Policy Decision</div>
+                      <div className="mt-1.5 text-sm font-semibold leading-6 text-rose-950">
                         {floodRisk === "high" ? "Activate Before Next Rain Window" : "Keep Ready for Trigger Event"}
                       </div>
-                      <div className="mt-2 h-1.5 rounded-full bg-emerald-100">
-                        <div className={`h-full rounded-full ${floodRisk === "high" ? "w-[84%] bg-emerald-600" : "w-[42%] bg-emerald-500"}`} />
+                      <div className="mt-2 h-1.5 rounded-full bg-rose-100">
+                        <div className={`h-full rounded-full ${floodRisk === "high" ? "w-[84%] bg-rose-600" : "w-[42%] bg-rose-500"}`} />
                       </div>
                     </div>
 
                     <div className="mt-2.5 grid gap-2">
                       <div className="rounded-2xl bg-white/85 px-3 py-2.5">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700/70">Premium</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-rose-700/75">Premium</div>
                         <div className="mt-1 text-sm font-semibold text-foreground">RM 64.80 / ha</div>
                       </div>
                       <div className="rounded-2xl bg-white/85 px-3 py-2.5">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700/70">Events</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-rose-700/75">Events</div>
                         <div className="mt-1 text-xs font-semibold text-foreground">Flood, Drought, Pests</div>
                       </div>
                       <div className="rounded-2xl bg-white/85 px-3 py-2.5">
-                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700/70">Enrollment</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-rose-700/75">Enrollment</div>
                         <div className="mt-1 text-xs font-semibold text-foreground">Branch / PPK</div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex h-full flex-col rounded-[1.4rem] border border-emerald-200/80 bg-[linear-gradient(160deg,rgba(236,253,245,0.96),rgba(209,250,229,0.9))] p-3.5 shadow-[0_16px_40px_rgba(16,185,129,0.11)]">
+                  <div className="flex h-full flex-col rounded-[1.4rem] border border-rose-200/80 bg-[linear-gradient(160deg,rgba(255,245,245,0.98),rgba(254,226,226,0.92))] p-3.5 shadow-[0_16px_40px_rgba(239,68,68,0.10)]">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700/80">Policy Summary</div>
-                        <h4 className="mt-1 text-[1.15rem] font-semibold text-emerald-950 sm:text-[1.35rem]">Agrobank STTP</h4>
-                        <p className="mt-1.5 max-w-xl text-xs leading-5 text-emerald-900/80 sm:text-sm">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-700/85">Policy Summary</div>
+                        <div className="mt-2 inline-flex items-center rounded-2xl border border-rose-200/70 bg-white/85 px-3 py-2 shadow-sm">
+                          <Image
+                            src="/agrobank-mark.svg"
+                            alt="Agrobank"
+                            width={160}
+                            height={48}
+                            className="h-10 w-auto"
+                          />
+                        </div>
+                        <h4 className="mt-2 text-[1.15rem] font-semibold text-rose-950 sm:text-[1.35rem]">Agrobank STTP</h4>
+                        <p className="mt-1.5 max-w-xl text-xs leading-5 text-rose-950/80 sm:text-sm">
                           Reduce uninsured flood exposure and protect recovery cash flow with subsidized coverage.
                         </p>
                       </div>
                       <Badge className={`shrink-0 px-2.5 py-0.5 text-[10px] ${
                         floodRisk === "high"
                           ? "border-destructive/25 bg-destructive/15 text-destructive"
-                          : "border-emerald-300/60 bg-white/70 text-emerald-800"
+                          : "border-rose-300/60 bg-white/80 text-rose-800"
                       }`}>
                         {floodRisk === "high" ? "Action Needed" : "Recommended"}
                       </Badge>
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <div className="rounded-full border border-emerald-200/70 bg-white/70 px-3 py-1 text-[11px] font-medium text-emerald-950">
+                      <div className="rounded-full border border-rose-200/70 bg-white/80 px-3 py-1 text-[11px] font-medium text-rose-950">
                         Uninsured Risk: {floodRisk === "high" ? "35%" : "5%"}
                       </div>
-                      <div className="rounded-full border border-emerald-200/70 bg-white/70 px-3 py-1 text-[11px] font-medium text-emerald-950">
+                      <div className="rounded-full border border-rose-200/70 bg-white/80 px-3 py-1 text-[11px] font-medium text-rose-950">
                         Payout: RM 3,000 / ha
                       </div>
                     </div>
 
-                    <div className="mt-3 rounded-[1.35rem] border border-emerald-300/40 bg-white/65 p-3 shadow-sm">
-                      <div className="flex flex-col gap-2.5">
+                    <div className="mt-3 flex flex-1 rounded-[1.35rem] border border-rose-300/40 bg-white/75 p-4 shadow-sm">
+                      <div className="flex h-full flex-1 flex-col gap-4">
                         <div className="min-w-0">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-800/70">Recommended Next Step</div>
-                          <p className="mt-1 max-w-lg text-xs leading-5 text-emerald-950/80 sm:text-sm">
+                          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-800/75">Recommended Next Step</div>
+                          <p className="mt-1.5 max-w-lg text-sm leading-6 text-rose-950/80">
                             Start the coverage review now to secure protection before exposure rises further.
                           </p>
                         </div>
-                        <div className="grid w-full min-w-0 gap-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+                        <div className="mt-auto grid w-full min-w-0 gap-3 lg:grid-cols-[minmax(0,1.45fr)_minmax(0,0.85fr)]">
                           <Dialog>
                             <DialogTrigger asChild>
-                              <Button className="w-full min-w-0 whitespace-normal rounded-2xl bg-[linear-gradient(135deg,#059669,#047857)] px-6 py-4 text-base font-semibold text-white shadow-[0_14px_28px_rgba(5,150,105,0.22)] transition hover:scale-[1.01] hover:bg-[linear-gradient(135deg,#047857,#065f46)]">
+                              <Button className="w-full min-w-0 whitespace-normal rounded-[1.6rem] bg-[linear-gradient(135deg,#ef4444,#dc2626)] px-7 py-5 text-lg font-semibold text-white shadow-[0_18px_34px_rgba(239,68,68,0.22)] transition hover:scale-[1.01] hover:bg-[linear-gradient(135deg,#dc2626,#b91c1c)]">
                                 Explore Coverage
-                                <ChevronRight className="h-4 w-4" />
+                                <ChevronRight className="h-5 w-5" />
                               </Button>
                             </DialogTrigger>
                             <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[720px]">
@@ -700,7 +723,7 @@ export default function ClimatePage() {
                             </DialogContent>
                           </Dialog>
 
-                          <Button variant="outline" onClick={() => window.open("https://www.agrobank.com.my", "_blank")} className="w-full min-w-0 whitespace-normal rounded-2xl border-emerald-300/70 bg-white/80 px-4 py-3 text-xs font-medium text-emerald-900 hover:bg-emerald-50 sm:text-sm">
+                          <Button variant="outline" onClick={() => window.open("https://www.agrobank.com.my", "_blank")} className="w-full min-w-0 whitespace-normal rounded-2xl border-rose-300/70 bg-white/85 px-4 py-4 text-sm font-medium text-rose-900 hover:bg-rose-50">
                             Find Nearest Branch
                           </Button>
                         </div>
@@ -742,7 +765,11 @@ export default function ClimatePage() {
                           {risk.status === "none" ? "No Risk" : `${risk.level}%`}
                         </Badge>
                       </div>
-                      <Progress value={risk.level} className={`h-2 ${getRiskBg(risk.status)}`} />
+                      <Progress
+                        value={risk.level}
+                        className={`h-2 ${getRiskTrackBg(risk.status)}`}
+                        indicatorClassName={getRiskIndicatorBg(risk.status)}
+                      />
                       <p className="text-xs text-muted-foreground">{risk.description}</p>
                       {risk.action && (
                         <div className="flex items-center gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20">
@@ -757,11 +784,11 @@ export default function ClimatePage() {
             </Card>
 
             {/* Quick Stats */}
-            <Card className="shadow-lg shadow-primary/5">
+            <Card className="min-h-[28rem] shadow-lg shadow-primary/5">
               <CardHeader>
                 <CardTitle className="text-base">Seasonal Summary</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="flex h-full flex-col justify-between gap-5">
                 <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
                   <div className="flex items-center gap-2">
                     <CloudRain className="h-4 w-4 text-info" />

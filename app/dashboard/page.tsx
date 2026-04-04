@@ -513,7 +513,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 pb-20 items-start">
           
           {/* Progress Tracker / Sensor Input */}
-          <Card className="lg:col-span-7 shadow-md border border-border/50 rounded-2xl bg-white overflow-hidden h-fit flex flex-col">
+          <Card className="lg:col-span-7 flex h-fit flex-col overflow-hidden rounded-2xl border border-border/50 bg-white py-0 gap-0 shadow-md">
             <CardContent className="p-0 flex flex-col">
                <div className="bg-[#f8f9fa] px-5 py-0 min-h-[60px] border-b border-border/40 flex justify-between items-center shrink-0">
                  <div>
@@ -566,7 +566,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Plant Tracker AI Chatbot */}
-          <Card className="lg:col-span-3 shadow-md border border-border/50 rounded-2xl bg-white flex flex-col h-full min-h-[400px]">
+          <Card className="lg:col-span-3 flex h-full min-h-[400px] flex-col overflow-hidden rounded-2xl border border-border/50 bg-white py-0 gap-0 shadow-md">
             <div className="bg-primary px-4 py-0 min-h-[60px] flex items-center justify-between shrink-0 rounded-t-2xl">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center text-xl">
