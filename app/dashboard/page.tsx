@@ -128,13 +128,17 @@ export default function DashboardPage() {
 
   const [phoneSynced, setPhoneSynced] = useState(false)
   const [plantHeight, setPlantHeight] = useState("0 cm")
-
   const [arSessionId, setArSessionId] = useState<string | null>(null)
+  const isFirstRender = useRef(true)
   const [isQrModalOpen, setIsQrModalOpen] = useState(false)
   const [qrUrl, setQrUrl] = useState("")
   const [isChatPopped, setIsChatPopped] = useState(false)
 
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [chatMessages])
 
@@ -403,6 +407,7 @@ export default function DashboardPage() {
                {/* Environmental Indicators & Sound Control */}
                <div className="absolute top-6 right-6 z-20 flex gap-2">
                  <button 
+                   suppressHydrationWarning
                    onClick={() => setIsSoundEnabled(!isSoundEnabled)}
                    className="bg-black/20 text-white backdrop-blur-md rounded-full shadow-sm p-2 text-sm border border-white/30 hover:bg-black/30 transition flex items-center justify-center"
                  >
@@ -660,7 +665,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-10 gap-6 pb-20 items-start">
           
           {/* Progress Tracker / Sensor Input */}
-          <Card className="lg:col-span-7 shadow-md border border-border/50 rounded-2xl bg-white overflow-hidden h-fit flex flex-col">
+          <Card className="lg:col-span-7 flex h-fit flex-col overflow-hidden rounded-2xl border border-border/50 bg-white py-0 gap-0 shadow-md">
             <CardContent className="p-0 flex flex-col">
                <div className="bg-[#f8f9fa] px-5 py-0 min-h-[60px] border-b border-border/40 flex justify-between items-center shrink-0">
                  <div>
@@ -686,7 +691,7 @@ export default function DashboardPage() {
                     {!phoneSynced ? (
                       <Dialog open={isQrModalOpen} onOpenChange={setIsQrModalOpen}>
                         <DialogTrigger asChild>
-                          <Button onClick={openArModal} className="rounded-full px-6 font-medium bg-slate-800 hover:bg-slate-700">
+                          <Button suppressHydrationWarning onClick={openArModal} className="rounded-full px-6 font-medium bg-slate-800 hover:bg-slate-700">
                             <Smartphone className="h-4 w-4 mr-2" /> Connect & Measure
                           </Button>
                         </DialogTrigger>
@@ -726,13 +731,14 @@ export default function DashboardPage() {
                    <h4 className="font-semibold text-sm text-slate-800 mb-2">Manual Update</h4>
                    <div className="flex gap-2">
                      <button
+                       suppressHydrationWarning
                        type="button"
                        onClick={() => photoInputRef.current?.click()}
                        className="flex-1 flex gap-2 items-center justify-center border border-slate-200 rounded-lg py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
                      >
                        <Camera className="h-4 w-4" /> Add Photo
                      </button>
-                     <button className="flex-1 flex gap-2 items-center justify-center border border-slate-200 rounded-lg py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+                     <button suppressHydrationWarning className="flex-1 flex gap-2 items-center justify-center border border-slate-200 rounded-lg py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
                        <Plus className="h-4 w-4" /> Add Log
                      </button>
                    </div>
@@ -759,6 +765,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <button
+                  suppressHydrationWarning
                   onClick={() => setIsChatPopped(!isChatPopped)}
                   className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors"
                   title={isChatPopped ? 'Minimize' : 'Expand'}

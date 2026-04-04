@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { 
-  Leaf, LayoutDashboard, Bug, CloudSun, Map, Package, 
+  Leaf, LayoutDashboard, Bug, CloudSun,
   Settings, HelpCircle, LogOut, Bell, Droplets, Snowflake,
   Activity, Radio, Play, Plus
 } from "lucide-react"
@@ -15,8 +15,6 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Pest Detection", href: "/dashboard/pest", icon: Bug },
   { name: "Climate & Risk", href: "/dashboard/climate", icon: CloudSun },
-  { name: "Farm Map", href: "/dashboard/map", icon: Map },
-  { name: "Supply & Output", href: "/dashboard/supply", icon: Package },
 ]
 
 const shortcuts = [

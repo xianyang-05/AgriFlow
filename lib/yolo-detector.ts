@@ -101,12 +101,10 @@ class YOLODetector {
 
   /**
    * Run detection on an image element.
-   * @param imageEl  HTMLImageElement or HTMLCanvasElement to analyse
-   * @param threshold  Confidence threshold (0–1, default 0.25)
+   * Returns the strongest post-NMS detections without applying a confidence cutoff.
    */
   async detect(
     imageEl: HTMLImageElement | HTMLCanvasElement,
-    threshold = 0.25,
   ): Promise<Detection[]> {
     if (!this.session) throw new Error('Model not loaded – call detect.load() first')
 
@@ -188,13 +186,16 @@ class YOLODetector {
         if (s > maxScore) { maxScore = s; maxIdx = c }
       }
 
-      if (maxScore < threshold) continue
-
       // Convert cx,cy,w,h (letterbox coords) → x1,y1,x2,y2 (original pixels)
       const x1 = Math.max(0,     ((cx - bw / 2) - padX) / scale)
       const y1 = Math.max(0,     ((cy - bh / 2) - padY) / scale)
       const x2 = Math.min(origW, ((cx + bw / 2) - padX) / scale)
       const y2 = Math.min(origH, ((cy + bh / 2) - padY) / scale)
+
+      const confidencePercent = Math.round(maxScore * 100)
+
+      // Skip invalid boxes and detections that would display as 0% confidence.
+      if (!Number.isFinite(maxScore) || confidencePercent <= 0 || x2 <= x1 || y2 <= y1) continue
 
       const cls: PlantClass = this.classes[maxIdx] ?? {
         id: maxIdx,
@@ -222,7 +223,7 @@ class YOLODetector {
     }
 
     // ── 5. Non-Maximum Suppression ─────────────────────────────────────────────
-    return this.nms(raw, 0.45)
+    return this.nms(raw, 0.45).slice(0, 50)
   }
 
   /**

@@ -24,3 +24,4 @@ datasets/
 runs/
 *.pt
 __pycache__/
+tsconfig.tsbuildinfo
