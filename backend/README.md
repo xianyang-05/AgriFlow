@@ -5,9 +5,13 @@ FastAPI backend for deterministic crop recommendations.
 ## Run
 
 ```bash
-pip install -e .[dev]
+pip install -e ".[dev,ml]"
 uvicorn app.main:app --reload
 ```
+
+Install without the optional `ml` extra when you want the lightweight runtime
+used by Vercel. In that mode the backend still works, but price forecasting
+falls back to the static baseline instead of the local XGBoost model.
 
 ## Climate Model
 

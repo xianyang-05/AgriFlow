@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from calendar import monthrange
 from datetime import date
+from functools import lru_cache
+from importlib.util import find_spec
 import logging
 from pathlib import Path
 from typing import Any
@@ -371,6 +373,15 @@ class PriceService:
             return self._model is not None and self._feature_df is not None
 
         self._load_attempted = True
+        if not xgboost_runtime_available():
+            logger.info(
+                "Price model disabled because xgboost is not installed; using baseline fallback."
+            )
+            self._model = None
+            self._feature_df = None
+            self._feature_columns = []
+            return False
+
         try:
             with warnings.catch_warnings():
                 warnings.filterwarnings(
@@ -390,3 +401,8 @@ class PriceService:
             self._feature_columns = []
 
         return self._model is not None and self._feature_df is not None
+
+
+@lru_cache(maxsize=1)
+def xgboost_runtime_available() -> bool:
+    return find_spec("xgboost") is not None

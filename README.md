@@ -10,6 +10,10 @@ AgriFlow is a Next.js frontend with a FastAPI backend and local model artifacts 
 4. Set `NEXT_PUBLIC_API_BASE_URL=/server`.
 5. Deploy and verify `/server/api/v1/health`.
 
+The Vercel backend uses a slim Python runtime. Climate scoring still runs from
+the bundled climate model, while price forecasting falls back to the static
+baseline unless you install the optional backend `ml` extra on another host.
+
 ## Required Vercel environment variables
 
 - `DATABASE_URL`

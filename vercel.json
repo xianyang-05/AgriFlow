@@ -10,9 +10,7 @@
       "routePrefix": "/server",
       "maxDuration": 60,
       "includeFiles": [
-        "backend/climate_model_v2.joblib",
-        "models/saved_models/**",
-        "data/processed/model_ready_daily_features.csv"
+        "backend/climate_model_v2.joblib"
       ]
     }
   }
