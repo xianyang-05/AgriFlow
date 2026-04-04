@@ -1,178 +1,267 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Bug, Upload, ImageIcon, AlertTriangle, CheckCircle2, 
-  MapPin, Calendar, Leaf, ShieldAlert, FlaskConical, Info
+import { Slider } from "@/components/ui/slider"
+import { Progress } from "@/components/ui/progress"
+import {
+  Bug, Upload, ImageIcon, AlertTriangle, CheckCircle2,
+  MapPin, Calendar, Leaf, FlaskConical, Info,
+  ScanLine, RefreshCw, ChevronDown, ChevronUp, Cpu, Zap,
+  CircleAlert, CircleCheck, Sparkles, FileWarning,
 } from "lucide-react"
+import { detector, type Detection } from "@/lib/yolo-detector"
 
-interface DetectionResult {
-  disease: string
-  severity: "low" | "medium" | "high"
-  confidence: number
-  treatment: string
-  prevention: string
-}
+// ─── Static sidebar data ──────────────────────────────────────────────────────
 
 const nearbyAlerts = [
-  {
-    id: 1,
-    pest: "Aphids",
-    location: "5km north",
-    date: "2 days ago",
-    severity: "medium",
-  },
-  {
-    id: 2,
-    pest: "Leaf Blight",
-    location: "8km east",
-    date: "5 days ago",
-    severity: "high",
-  },
-  {
-    id: 3,
-    pest: "Whiteflies",
-    location: "3km west",
-    date: "1 week ago",
-    severity: "low",
-  },
+  { id: 1, pest: "Aphids",      location: "5km north", date: "2 days ago", severity: "medium" },
+  { id: 2, pest: "Leaf Blight", location: "8km east",  date: "5 days ago", severity: "high"   },
+  { id: 3, pest: "Whiteflies",  location: "3km west",  date: "1 week ago", severity: "low"    },
 ]
 
 const recentScans = [
-  {
-    id: 1,
-    crop: "Wheat Field A3",
-    result: "Healthy",
-    date: "Yesterday",
-    severity: null,
-  },
-  {
-    id: 2,
-    crop: "Rice Paddy B1",
-    result: "Brown Spot",
-    date: "3 days ago",
-    severity: "low",
-  },
-  {
-    id: 3,
-    crop: "Vegetable Plot C2",
-    result: "Healthy",
-    date: "1 week ago",
-    severity: null,
-  },
+  { id: 1, crop: "Wheat Field A3",    result: "Healthy",    date: "Yesterday",  severity: null  },
+  { id: 2, crop: "Rice Paddy B1",     result: "Brown Spot", date: "3 days ago", severity: "low" },
+  { id: 3, crop: "Vegetable Plot C2", result: "Healthy",    date: "1 week ago", severity: null  },
 ]
 
+// ─── Helper: severity → tailwind classes ──────────────────────────────────────
+
+const getSeverityStyle = (severity: string | null) => {
+  switch (severity) {
+    case "high":   return "bg-red-500/15    text-red-500    border-red-500/30"
+    case "medium": return "bg-orange-500/15 text-orange-500 border-orange-500/30"
+    case "low":    return "bg-yellow-500/15 text-yellow-600 border-yellow-500/30"
+    default:       return "bg-green-500/15  text-green-600  border-green-500/30"
+  }
+}
+
+const SeverityDot = ({ s }: { s: string }) =>
+  s === "high"   ? <CircleAlert className="h-3.5 w-3.5 text-red-500" />    :
+  s === "medium" ? <CircleAlert className="h-3.5 w-3.5 text-orange-500" /> :
+  s === "low"    ? <CircleAlert className="h-3.5 w-3.5 text-yellow-500" /> :
+                   <CircleCheck className="h-3.5 w-3.5 text-green-500" />
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+type ModelStatus = "idle" | "loading" | "ready" | "error"
+
 export default function PestDetectionPage() {
-  const [image, setImage] = useState<string | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [result, setResult] = useState<DetectionResult | null>(null)
+  const [detectionMode, setDetectionMode] = useState<'disease' | 'pest'>('disease')
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null)
+  const [isDragging, setIsDragging]     = useState(false)
+  const [modelStatus, setModelStatus]   = useState<ModelStatus>("idle")
+  const [loadProgress, setLoadProgress] = useState(0)
+  const [isAnalyzing, setIsAnalyzing]   = useState(false)
+  const [detections, setDetections]     = useState<Detection[]>([])
+  const [threshold, setThreshold]        = useState(0.30)
+  const [expandedIdx, setExpandedIdx]   = useState<number | null>(0)
+  const [origSize, setOrigSize]          = useState<{ w: number; h: number } | null>(null)
+  const [error, setError]               = useState<string | null>(null)
+
+  const imgRef    = useRef<HTMLImageElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  // ── Load model on first mount and layer switch ──────────────────────────────────────────────
+  useEffect(() => {
+    setModelStatus("loading")
+    let progress = 0
+    const tick = setInterval(() => {
+      progress = Math.min(progress + Math.random() * 12, 90)
+      setLoadProgress(Math.round(progress))
+    }, 300)
+
+    detector.load(detectionMode)
+      .then(() => {
+        clearInterval(tick)
+        setLoadProgress(100)
+        setTimeout(() => setModelStatus("ready"), 300)
+        
+        // Auto-run if there is an image loaded when swapping!
+        if (imgRef.current) {
+          runDetection(imgRef.current)
+        }
+      })
+      .catch((e) => {
+        clearInterval(tick)
+        setModelStatus("error")
+        setError(String(e))
+      })
+
+    return () => clearInterval(tick)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detectionMode])
+
+  // ── Re-draw bounding boxes whenever detections change ─────────────────────
+  useEffect(() => {
+    if (!canvasRef.current || !origSize || detections.length === 0) {
+      canvasRef.current?.getContext("2d")?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
+      return
+    }
+    const renderScale = Math.max(1, 1200 / origSize.w)
+    canvasRef.current.width = origSize.w * renderScale
+    canvasRef.current.height = origSize.h * renderScale
+    detector.drawDetections(canvasRef.current, detections, origSize.w, origSize.h)
+  }, [detections, origSize])
+
+  // ── Process uploaded file ──────────────────────────────────────────────────
+  const processFile = useCallback((file: File) => {
+    if (!file.type.startsWith("image/")) return
+    setError(null)
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string
+      setImageDataUrl(dataUrl)
+      setDetections([])
+      setExpandedIdx(null)
+
+      const img = new Image()
+      img.onload = () => {
+        setOrigSize({ w: img.naturalWidth, h: img.naturalHeight })
+        runDetection(img)
+      }
+      img.src = dataUrl
+    }
+    reader.readAsDataURL(file)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threshold])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsDragging(false)
-    const file = e.dataTransfer.files[0]
-    if (file && file.type.startsWith("image/")) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setImage(e.target?.result as string)
-        analyzeImage()
-      }
-      reader.readAsDataURL(file)
-    }
-  }, [])
+    processFile(e.dataTransfer.files[0])
+  }, [processFile])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setImage(e.target?.result as string)
-        analyzeImage()
-      }
-      reader.readAsDataURL(file)
-    }
+    if (e.target.files?.[0]) processFile(e.target.files[0])
+    e.target.value = ""
   }
 
-  const analyzeImage = () => {
+  // ── YOLO inference ────────────────────────────────────────────────────────
+  const runDetection = async (imgEl: HTMLImageElement) => {
     setIsAnalyzing(true)
-    setResult(null)
-    // Simulate AI analysis
-    setTimeout(() => {
-      setResult({
-        disease: "Late Blight (Phytophthora infestans)",
-        severity: "medium",
-        confidence: 94,
-        treatment: "Apply copper-based fungicide immediately. Remove and destroy affected leaves. Ensure proper plant spacing for air circulation.",
-        prevention: "Use certified disease-free seeds. Avoid overhead irrigation. Apply preventive fungicides during humid conditions.",
-      })
+    setDetections([])
+    try {
+      if (!detector.isLoaded) await detector.load(detectionMode)
+      const found = await detector.detect(imgEl, threshold)
+      setDetections(found)
+      setExpandedIdx(found.length > 0 ? 0 : null)
+    } catch (e) {
+      setError(`Detection failed: ${e}`)
+    } finally {
       setIsAnalyzing(false)
-    }, 2000)
+    }
   }
 
-  const getSeverityStyle = (severity: string | null) => {
-    switch (severity) {
-      case "high":
-        return "bg-destructive/15 text-destructive border-destructive/30"
-      case "medium":
-        return "bg-warning/15 text-warning-foreground border-warning/30"
-      case "low":
-        return "bg-success/15 text-success border-success/30"
-      default:
-        return "bg-primary/15 text-primary border-primary/30"
-    }
+  const rerun = () => {
+    if (imgRef.current) runDetection(imgRef.current)
   }
 
   const resetScan = () => {
-    setImage(null)
-    setResult(null)
+    setImageDataUrl(null)
+    setDetections([])
+    setOrigSize(null)
+    setExpandedIdx(null)
+    setError(null)
   }
 
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+
+      {/* ── Sticky header ────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-sm border-b border-border">
-        <div className="px-6 h-16 flex items-center">
+        <div className="px-6 h-16 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Pest Detection</h1>
-            <p className="text-sm text-muted-foreground">
-              AI-powered disease and pest identification
+            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+              <Bug className="h-6 w-6 text-primary" />
+              Pest &amp; Disease Detection
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              YOLOv8 · {detectionMode === 'pest' ? 'Pest detection · simranvolunesia/pest-dataset' : 'Disease detection · Plant Village dataset'}
             </p>
           </div>
+
+          {/* Model status pill */}
+          <div className={`flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full border transition-all ${
+            modelStatus === "ready"   ? "bg-green-500/10  text-green-600  border-green-500/30"  :
+            modelStatus === "loading" ? "bg-blue-500/10   text-blue-500   border-blue-500/30 animate-pulse" :
+            modelStatus === "error"   ? "bg-red-500/10    text-red-500    border-red-500/30"    :
+                                        "bg-muted text-muted-foreground border-border"
+          }`}>
+            <Cpu className="h-3.5 w-3.5" />
+            {modelStatus === "ready"   && `${detectionMode === 'pest' ? 'Pest' : 'Disease'} Model · Ready`}
+            {modelStatus === "loading" && `Loading ${detectionMode === 'pest' ? 'Pest' : 'Disease'} Model… ${loadProgress}%`}
+            {modelStatus === "error"   && "Model error"}
+            {modelStatus === "idle"    && "Initialising…"}
+          </div>
         </div>
+
+        {/* Loading bar under header */}
+        {modelStatus === "loading" && (
+          <Progress value={loadProgress} className="h-0.5 rounded-none" />
+        )}
       </header>
 
       <div className="p-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Upload Area */}
-          <div className="lg:col-span-2 space-y-6">
+
+          {/* ── Main column ────────────────────────────────────────────────── */}
+          <div className="lg:col-span-2 space-y-5">
+
+            {/* Mode toggle */}
+            <div className="flex bg-muted/50 p-1.5 rounded-xl w-full max-w-sm mb-4 border border-border">
+              <button
+                onClick={() => { if (detectionMode !== 'disease') { resetScan(); setDetectionMode('disease') } }}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-semibold rounded-lg transition-all ${
+                  detectionMode === 'disease' 
+                    ? 'bg-background shadow-sm text-foreground ring-1 ring-border' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Leaf className="h-4 w-4" />
+                Diagnose Diseases
+              </button>
+              <button
+                onClick={() => { if (detectionMode !== 'pest') { resetScan(); setDetectionMode('pest') } }}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-semibold rounded-lg transition-all ${
+                  detectionMode === 'pest' 
+                    ? 'bg-background shadow-sm text-foreground ring-1 ring-border' 
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Bug className="h-4 w-4" />
+                Detect Pests
+              </button>
+            </div>
+
+            {/* ── Upload / Preview card ──────────────────────────────────── */}
             <Card className="shadow-lg shadow-primary/5">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Bug className="h-5 w-5 text-primary" />
+                  <ScanLine className="h-5 w-5 text-primary" />
                   Upload Plant Image
                 </CardTitle>
                 <CardDescription>
-                  Take a photo or upload an image of the affected plant
+                  Drag & drop or click to upload — YOLO AI detects objects and pests instantly
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                {!image ? (
+              <CardContent className="space-y-4">
+
+                {!imageDataUrl ? (
+                  /* ── Drop zone ──────────────────────────────────────────── */
                   <div
-                    onDragOver={(e) => {
-                      e.preventDefault()
-                      setIsDragging(true)
-                    }}
+                    onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
                     onDragLeave={() => setIsDragging(false)}
                     onDrop={handleDrop}
-                    className={`relative border-2 border-dashed rounded-2xl p-12 text-center transition-all ${
+                    className={`relative border-2 border-dashed rounded-2xl p-12 text-center transition-all duration-200 ${
                       isDragging
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/50 hover:bg-muted/50"
-                    }`}
+                        ? "border-primary bg-primary/5 scale-[1.01]"
+                        : "border-border hover:border-primary/50 hover:bg-muted/30"
+                    } ${modelStatus === "loading" ? "opacity-60 pointer-events-none" : ""}`}
                   >
                     <input
                       type="file"
@@ -180,144 +269,325 @@ export default function PestDetectionPage() {
                       onChange={handleFileSelect}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
-                    <div className="flex flex-col items-center gap-4">
-                      <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-                        <Upload className="h-8 w-8 text-primary" />
+                    <div className="flex flex-col items-center gap-4 pointer-events-none">
+                      <div className={`h-20 w-20 rounded-2xl flex items-center justify-center transition-all ${
+                        isDragging ? "bg-primary/20 scale-110" : "bg-primary/10"
+                      }`}>
+                        <Upload className={`h-9 w-9 transition-colors ${isDragging ? "text-primary" : "text-primary/70"}`} />
                       </div>
                       <div>
-                        <p className="text-lg font-medium text-foreground">
-                          Drag and drop your image here
+                        <p className="text-lg font-semibold text-foreground">
+                          {modelStatus === "loading" ? "Model loading — please wait…" : "Drop your plant photo here"}
                         </p>
                         <p className="text-sm text-muted-foreground mt-1">
-                          or click to browse from your device
+                          {modelStatus !== "loading" && "or click to browse from your device"}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <ImageIcon className="h-4 w-4" />
-                        <span>Supports JPG, PNG, WEBP</span>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1.5">
+                          <ImageIcon className="h-3.5 w-3.5" />
+                          <span>JPG · PNG · WEBP</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Zap className="h-3.5 w-3.5 text-primary" />
+                          <span>In-browser WASM inference</span>
+                        </div>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    {/* Image Preview */}
-                    <div className="relative rounded-2xl overflow-hidden bg-muted aspect-video">
+                  /* ── Image + canvas overlay ──────────────────────────── */
+                  <div className="space-y-3">
+                    <div
+                      className="relative rounded-2xl overflow-hidden bg-muted"
+                      style={{ maxHeight: 500 }}
+                    >
                       <img
-                        src={image}
+                        ref={imgRef}
+                        src={imageDataUrl}
                         alt="Uploaded plant"
-                        className="w-full h-full object-cover"
+                        className="w-full object-contain block"
+                        style={{ maxHeight: 500 }}
                       />
+                      <canvas
+                        ref={canvasRef}
+                        className="absolute inset-0 w-full h-full"
+                        style={{ pointerEvents: "none" }}
+                      />
+                      {/* Analysing overlay */}
                       {isAnalyzing && (
-                        <div className="absolute inset-0 bg-background/80 flex items-center justify-center">
-                          <div className="text-center space-y-3">
-                            <div className="h-10 w-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
-                            <p className="text-sm font-medium text-foreground">Analyzing image...</p>
-                            <p className="text-xs text-muted-foreground">
-                              AI is scanning for diseases and pests
-                            </p>
+                        <div className="absolute inset-0 bg-background/70 backdrop-blur-sm flex items-center justify-center">
+                          <div className="text-center space-y-3 p-6">
+                            <div className="relative mx-auto h-14 w-14">
+                              <div className="absolute inset-0 rounded-full border-4 border-primary/20" />
+                              <div className="absolute inset-0 rounded-full border-4 border-t-primary animate-spin" />
+                              <Bug className="absolute inset-0 m-auto h-5 w-5 text-primary" />
+                            </div>
+                            <p className="text-sm font-semibold text-foreground">Running YOLO detection…</p>
+                            <p className="text-xs text-muted-foreground">Scanning for pests and diseases</p>
                           </div>
                         </div>
                       )}
                     </div>
-                    <Button variant="outline" onClick={resetScan} className="w-full">
-                      Scan Another Image
-                    </Button>
+
+                    {/* Action buttons */}
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={resetScan} className="flex-1 gap-2">
+                        <Upload className="h-4 w-4" />
+                        Upload New
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={rerun}
+                        disabled={isAnalyzing || modelStatus !== "ready"}
+                        className="flex-1 gap-2"
+                      >
+                        <RefreshCw className={`h-4 w-4 ${isAnalyzing ? "animate-spin" : ""}`} />
+                        Re-analyze
+                      </Button>
+                    </div>
                   </div>
                 )}
+
+                {/* ── Confidence threshold slider ──────────────────────── */}
+                <div className="pt-1 space-y-2 border-t border-border mt-2">
+                  <div className="flex items-center justify-between pt-3 text-sm">
+                    <span className="font-medium text-foreground">Confidence Threshold</span>
+                    <span className="text-primary font-bold tabular-nums">
+                      {Math.round(threshold * 100)}%
+                    </span>
+                  </div>
+                  <Slider
+                    min={5} max={90} step={5}
+                    value={[Math.round(threshold * 100)]}
+                    onValueChange={([v]) => setThreshold(v / 100)}
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Lower = more detections (possible false positives) · Higher = stricter
+                  </p>
+                </div>
+
               </CardContent>
             </Card>
 
-            {/* Detection Result */}
-            {result && (
-              <Card className="shadow-lg shadow-primary/5 border-primary/30">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2">
-                      <ShieldAlert className="h-5 w-5 text-primary" />
-                      Detection Result
-                    </CardTitle>
-                    <Badge className={getSeverityStyle(result.severity)}>
-                      {result.severity} severity
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Disease Name */}
-                  <div className="p-4 rounded-xl bg-muted/50">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-muted-foreground">Identified Disease</span>
-                      <span className="text-sm text-primary font-medium">{result.confidence}% confidence</span>
-                    </div>
-                    <h3 className="text-xl font-semibold text-foreground">{result.disease}</h3>
-                  </div>
-
-                  {/* Treatment */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <FlaskConical className="h-4 w-4 text-primary" />
-                      <span className="font-medium text-foreground">Recommended Treatment</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed pl-6">
-                      {result.treatment}
-                    </p>
-                  </div>
-
-                  {/* Prevention */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Leaf className="h-4 w-4 text-success" />
-                      <span className="font-medium text-foreground">Prevention Tips</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed pl-6">
-                      {result.prevention}
-                    </p>
-                  </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex gap-3 pt-2">
-                    <Button className="flex-1">Save to Records</Button>
-                    <Button variant="outline" className="flex-1">Get Expert Help</Button>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* ── Error alert ───────────────────────────────────────────── */}
+            {error && (
+              <div className="flex items-start gap-3 p-4 rounded-xl border border-red-500/30 bg-red-500/5">
+                <FileWarning className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-red-500">Error</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 font-mono">{error}</p>
+                </div>
+              </div>
             )}
+
+            {/* ── Detection results ──────────────────────────────────────── */}
+            {!isAnalyzing && imageDataUrl && !error && (
+              <>
+                {detections.length === 0 ? (
+                  <Card className="border-green-500/30 bg-green-500/5">
+                    <CardContent className="p-5 flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-xl bg-green-500/15 flex items-center justify-center flex-shrink-0">
+                        <CheckCircle2 className="h-6 w-6 text-green-500" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">No objects detected above threshold</p>
+                        <p className="text-sm text-muted-foreground mt-0.5">
+                          Try lowering the confidence threshold, or upload a higher-quality image.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Result summary row */}
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-xs font-medium text-muted-foreground">
+                        {detections.length} detection{detections.length !== 1 ? "s" : ""} found
+                      </h2>
+                      <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">
+                        YOLOv8 · {Math.round(threshold * 100)}% conf
+                      </Badge>
+                    </div>
+
+                    {/* Detection cards */}
+                    {detections.map((det, idx) => (
+                      <Card
+                        key={idx}
+                        className="overflow-hidden transition-all duration-200"
+                        style={{ borderColor: `${det.color}50` }}
+                      >
+                        {/* Clickable header */}
+                        <button
+                          className="w-full text-left focus:outline-none"
+                          onClick={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
+                        >
+                          <CardHeader className="py-3 px-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                {/* Colour swatch icon */}
+                                <div
+                                  className="h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                                  style={{ backgroundColor: `${det.color}20` }}
+                                >
+                                  {det.isHealthy
+                                    ? <Leaf className="h-4 w-4" style={{ color: det.color }} />
+                                    : <Bug  className="h-4 w-4" style={{ color: det.color }} />}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-sm text-foreground truncate">
+                                    {det.displayName}
+                                  </p>
+                                  {det.crop !== "N/A" && (
+                                    <p className="text-xs text-muted-foreground">{det.crop}</p>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {det.severity !== "none" && (
+                                  <Badge className={`text-xs ${getSeverityStyle(det.severity)}`}>
+                                    {det.severity}
+                                  </Badge>
+                                )}
+                                <span
+                                  className="text-sm font-bold tabular-nums"
+                                  style={{ color: det.color }}
+                                >
+                                  {Math.round(det.confidence * 100)}%
+                                </span>
+                                {expandedIdx === idx
+                                  ? <ChevronUp   className="h-4 w-4 text-muted-foreground" />
+                                  : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                              </div>
+                            </div>
+                          </CardHeader>
+                        </button>
+
+                        {/* Expanded body */}
+                        {expandedIdx === idx && (
+                          <CardContent className="pt-0 pb-4 px-4 space-y-4 border-t border-border">
+                            {/* Confidence bar */}
+                            <div className="space-y-1.5 pt-4">
+                              <div className="flex justify-between text-xs text-muted-foreground">
+                                <span>Detection confidence</span>
+                                <span className="font-bold" style={{ color: det.color }}>
+                                  {Math.round(det.confidence * 100)}%
+                                </span>
+                              </div>
+                              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className="h-full rounded-full transition-all duration-700"
+                                  style={{
+                                    width: `${Math.round(det.confidence * 100)}%`,
+                                    backgroundColor: det.color,
+                                  }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Bounding box coords */}
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              {[["X1", Math.round(det.bbox[0])], ["Y1", Math.round(det.bbox[1])],
+                                ["X2", Math.round(det.bbox[2])], ["Y2", Math.round(det.bbox[3])]].map(([k, v]) => (
+                                <div key={k} className="bg-muted/50 rounded-lg px-3 py-2 flex justify-between">
+                                  <span className="text-muted-foreground">{k}</span>
+                                  <span className="font-mono font-medium">{v} px</span>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Treatment (only for non-N/A) */}
+                            {det.treatment !== "N/A" && !det.isHealthy && (
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                  <FlaskConical className="h-4 w-4 text-primary" />
+                                  Treatment
+                                </div>
+                                <p className="text-xs text-muted-foreground leading-relaxed pl-6">
+                                  {det.treatment}
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Prevention (only for non-N/A) */}
+                            {det.prevention !== "N/A" && (
+                              <div className="space-y-1.5">
+                                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                  <Leaf className="h-4 w-4 text-green-500" />
+                                  {det.isHealthy ? "Care Tips" : "Prevention"}
+                                </div>
+                                <p className="text-xs text-muted-foreground leading-relaxed pl-6">
+                                  {det.prevention}
+                                </p>
+                              </div>
+                            )}
+
+                            <div className="flex gap-2 pt-1">
+                              <Button size="sm" className="flex-1">Save to Records</Button>
+                              <Button size="sm" variant="outline" className="flex-1">Expert Help</Button>
+                            </div>
+                          </CardContent>
+                        )}
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Nearby Alerts */}
-            <Card className="shadow-lg shadow-primary/5">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-warning" />
+          {/* ── Sidebar ──────────────────────────────────────────────────── */}
+          <div className="space-y-5">
+
+            {/* How it works */}
+            <Card className="bg-primary/5 border-primary/20 shadow shadow-primary/5">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-primary" />
+                  <p className="text-sm font-semibold text-foreground">How it works</p>
+                </div>
+                <ol className="space-y-2 text-xs text-muted-foreground">
+                  {[
+                    "Image letterbox-resized to 640×640",
+                    "YOLOv8n ONNX runs in WebAssembly (no server!)",
+                    "Non-max suppression removes duplicate boxes",
+                    "Results mapped to class labels & severity",
+                  ].map((s, i) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="text-primary font-bold">{i + 1}.</span>
+                      <span>{s}</span>
+                    </li>
+                  ))}
+                </ol>
+              </CardContent>
+            </Card>
+
+            {/* Nearby alerts */}
+            <Card className="shadow shadow-primary/5">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <AlertTriangle className="h-4 w-4 text-orange-500" />
                   Nearby Pest Alerts
                 </CardTitle>
-                <CardDescription>
-                  Reported pest activity in your area
-                </CardDescription>
+                <CardDescription>Reported pest activity in your area</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {nearbyAlerts.map((alert) => (
-                    <div
-                      key={alert.id}
-                      className="p-3 rounded-xl border border-border hover:border-primary/50 transition-colors"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <span className="font-medium text-foreground">{alert.pest}</span>
-                        <Badge className={getSeverityStyle(alert.severity)}>
-                          {alert.severity}
-                        </Badge>
+                <div className="space-y-2.5">
+                  {nearbyAlerts.map((a) => (
+                    <div key={a.id} className="p-3 rounded-xl border border-border hover:border-primary/40 transition-colors">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <SeverityDot s={a.severity} />
+                          <span className="text-sm font-medium text-foreground">{a.pest}</span>
+                        </div>
+                        <Badge className={`text-xs ${getSeverityStyle(a.severity)}`}>{a.severity}</Badge>
                       </div>
                       <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          {alert.location}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {alert.date}
-                        </div>
+                        <div className="flex items-center gap-1"><MapPin   className="h-3 w-3" />{a.location}</div>
+                        <div className="flex items-center gap-1"><Calendar className="h-3 w-3" />{a.date}</div>
                       </div>
                     </div>
                   ))}
@@ -325,48 +595,45 @@ export default function PestDetectionPage() {
               </CardContent>
             </Card>
 
-            {/* Recent Scans */}
-            <Card className="shadow-lg shadow-primary/5">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-primary" />
+            {/* Recent scans */}
+            <Card className="shadow shadow-primary/5">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CheckCircle2 className="h-4 w-4 text-primary" />
                   Recent Scans
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {recentScans.map((scan) => (
-                    <div
-                      key={scan.id}
-                      className="flex items-center justify-between p-3 rounded-xl bg-muted/50"
-                    >
+                <div className="space-y-2.5">
+                  {recentScans.map((s) => (
+                    <div key={s.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
                       <div>
-                        <p className="text-sm font-medium text-foreground">{scan.crop}</p>
-                        <p className="text-xs text-muted-foreground">{scan.date}</p>
+                        <p className="text-sm font-medium text-foreground">{s.crop}</p>
+                        <p className="text-xs text-muted-foreground">{s.date}</p>
                       </div>
-                      <Badge className={getSeverityStyle(scan.severity)}>
-                        {scan.result}
-                      </Badge>
+                      <Badge className={`text-xs ${getSeverityStyle(s.severity)}`}>{s.result}</Badge>
                     </div>
                   ))}
                 </div>
               </CardContent>
             </Card>
 
-            {/* Tips Card */}
-            <Card className="shadow-lg shadow-primary/5 bg-primary/5 border-primary/20">
+            {/* Pro tip */}
+            <Card className="border-blue-500/20 bg-blue-500/5 shadow shadow-blue-500/5">
               <CardContent className="p-4">
                 <div className="flex gap-3">
-                  <Info className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                  <Info className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium text-foreground">Pro Tip</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      For best results, take close-up photos of affected leaves in natural daylight. Include both healthy and affected areas for comparison.
+                    <p className="text-sm font-semibold text-foreground">Pro Tip</p>
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                      For best results, photograph affected leaves in natural daylight.
+                      Include both healthy and affected areas in the same frame.
                     </p>
                   </div>
                 </div>
               </CardContent>
             </Card>
+
           </div>
         </div>
       </div>

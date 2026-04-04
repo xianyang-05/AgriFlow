@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.exceptions import DomainError
 from app.logging_config import (
+    clear_request_logging,
     configure_logging,
     get_logger,
     get_request_logging_context,
@@ -56,10 +57,11 @@ async def request_logging_middleware(request: Request, call_next):
         logger.info(
             "request.completed",
             status_code=response.status_code if response else 500,
-            **get_request_logging_context(),
+            **get_request_logging_context(request_id),
         )
         if response is not None:
             response.headers["X-Request-ID"] = request_id
+        clear_request_logging(request_id)
 
 
 @app.exception_handler(DomainError)

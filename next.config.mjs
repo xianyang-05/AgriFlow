@@ -36,6 +36,18 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      // onnxruntime-web uses browser WASM – stub out Node.js modules on client
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        path: false,
+        crypto: false,
+      }
+    }
+    return config
+  },
 }
 
 export default nextConfig

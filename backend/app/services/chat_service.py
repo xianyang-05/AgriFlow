@@ -1,7 +1,13 @@
 from app.exceptions import LLMError
 from app.logging_config import update_request_logging
 from app.repositories.chat_repository import ChatRepository
-from app.schemas.chat import ChatRequest, ChatResponse, ChatUpdatePayload, IntentClassification
+from app.schemas.chat import (
+    ChatRequest,
+    ChatResponse,
+    ChatUpdatePayload,
+    IntentClassification,
+    PreviewChatRequest,
+)
 from app.schemas.input import NormalizedFarmInput, UserPreferences
 from app.services.llm_service import LLMService
 from app.services.plan_history_service import PlanHistoryService
@@ -88,6 +94,68 @@ class ChatService:
             return self._handle_revert(db, request, classification)
         return self._handle_modification(db, request, current, classification)
 
+    def handle_preview(self, db, request: PreviewChatRequest) -> ChatResponse:
+        current = request.current_recommendation
+        history_payload: list[dict[str, str]] = []
+        context = current.model_dump()
+
+        try:
+            classification = self.llm_service.classify_intent(request.message, history_payload, context)
+        except LLMError:
+            return self._preview_unclassified(
+                request,
+                current,
+                message=(
+                    "I couldn't analyze that request because the plan assistant model is unavailable right now. "
+                    "Please check the Ollama service and configured model, then try again."
+                ),
+            )
+
+        if classification.confidence < 0.5:
+            return self._preview_unclassified(
+                request,
+                current,
+                message=(
+                    "I couldn't confidently interpret that request. Please rephrase it as a question, "
+                    "a plan change, or a revert request."
+                ),
+            )
+
+        if classification.intent == "revert":
+            try:
+                classification = self.llm_service.disambiguate_revert_intent(
+                    request.message,
+                    history_payload,
+                    context,
+                )
+            except LLMError:
+                return self._preview_unclassified(
+                    request,
+                    current,
+                    message=(
+                        "I couldn't confirm whether you wanted to revert a previous version or modify the current plan "
+                        "because the plan assistant model is unavailable right now. Please try again after checking Ollama."
+                    ),
+                )
+
+            if classification.confidence < 0.5:
+                return self._preview_unclassified(
+                    request,
+                    current,
+                    message=(
+                        "I couldn't confidently tell whether you wanted to revert the previous version or modify the current plan. "
+                        "Please say either 'revert to the previous version' or describe the change you want."
+                    ),
+                )
+
+        update_request_logging(chat_intent=classification.intent)
+
+        if classification.intent == "question":
+            return self._handle_preview_question(request, current, history_payload, classification)
+        if classification.intent == "revert":
+            return self._handle_preview_revert(request, current, classification)
+        return self._handle_preview_modification(db, request, current, classification)
+
     def _handle_question(
         self,
         db,
@@ -127,6 +195,21 @@ class ChatService:
             confidence=0.0,
             assistant_message=message,
             has_previous_version=current.has_previous_version,
+            status=current.status,
+            clarification_needed=current.clarification_needed,
+            clarification_questions=current.clarification_questions,
+            warnings=current.warnings,
+        )
+
+    def _preview_unclassified(self, request: PreviewChatRequest, current, *, message: str) -> ChatResponse:
+        update_request_logging(chat_intent="question")
+        return ChatResponse(
+            run_id=None,
+            intent="question",
+            confidence=0.0,
+            assistant_message=message,
+            updated_recommendation=current,
+            has_previous_version=False,
             status=current.status,
             clarification_needed=current.clarification_needed,
             clarification_questions=current.clarification_questions,
@@ -203,6 +286,95 @@ class ChatService:
             warnings=reverted.warnings,
         )
 
+    def _handle_preview_question(
+        self,
+        request: PreviewChatRequest,
+        current,
+        history_payload: list[dict[str, str]],
+        classification: IntentClassification,
+    ) -> ChatResponse:
+        try:
+            assistant_message = self.llm_service.answer_question(
+                request.message,
+                history_payload,
+                current.model_dump(),
+            )
+        except LLMError:
+            assistant_message = current.explanation or "I can answer questions about the current recommendation."
+
+        return ChatResponse(
+            run_id=None,
+            intent=classification.intent,
+            confidence=classification.confidence,
+            assistant_message=assistant_message,
+            updated_recommendation=current,
+            has_previous_version=False,
+            status=current.status,
+            clarification_needed=current.clarification_needed,
+            clarification_questions=current.clarification_questions,
+            warnings=current.warnings,
+        )
+
+    def _handle_preview_modification(
+        self,
+        db,
+        request: PreviewChatRequest,
+        current,
+        classification: IntentClassification,
+    ) -> ChatResponse:
+        updated_normalized = self._apply_normalized_updates(
+            current.normalized_input or NormalizedFarmInput(),
+            classification.updates,
+        )
+        updated_preferences = self._apply_preference_updates(
+            current.user_preferences,
+            classification.updates,
+        )
+        updated_recommendation = self.recommendation_service.rerun_preview(
+            db,
+            updated_normalized,
+            updated_preferences,
+        )
+        assistant_message = self._build_modification_message(
+            classification.updates,
+            updated_recommendation,
+        )
+        return ChatResponse(
+            run_id=None,
+            intent=classification.intent,
+            confidence=classification.confidence,
+            applied_updates=classification.updates,
+            updated_recommendation=updated_recommendation,
+            assistant_message=assistant_message,
+            has_previous_version=False,
+            status=updated_recommendation.status,
+            clarification_needed=updated_recommendation.clarification_needed,
+            clarification_questions=updated_recommendation.clarification_questions,
+            warnings=updated_recommendation.warnings,
+        )
+
+    def _handle_preview_revert(
+        self,
+        request: PreviewChatRequest,
+        current,
+        classification: IntentClassification,
+    ) -> ChatResponse:
+        assistant_message = (
+            "Preview chat can answer questions and tune the draft plan, but revert is only available after you save the plan."
+        )
+        return ChatResponse(
+            run_id=None,
+            intent=classification.intent,
+            confidence=classification.confidence,
+            assistant_message=assistant_message,
+            updated_recommendation=current,
+            has_previous_version=False,
+            status=current.status,
+            clarification_needed=current.clarification_needed,
+            clarification_questions=current.clarification_questions,
+            warnings=current.warnings,
+        )
+
     def _apply_normalized_updates(
         self,
         normalized_input: NormalizedFarmInput,
@@ -237,7 +409,11 @@ class ChatService:
         self.chat_repository.create(db, run_id, "user", user_message, intent)
         self.chat_repository.create(db, run_id, "assistant", assistant_message, intent)
 
-    def _build_modification_message(self, updates: ChatUpdatePayload, updated_recommendation) -> str:
+    def _build_modification_message(
+        self,
+        updates: ChatUpdatePayload,
+        updated_recommendation,
+    ) -> str:
         change_summary: list[str] = []
 
         if updates.budget_myr is not None:

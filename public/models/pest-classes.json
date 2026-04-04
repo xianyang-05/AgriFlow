@@ -1,0 +1,92 @@
+[
+  {
+    "id": 0,
+    "name": "aphids",
+    "displayName": "Aphids",
+    "crop": "N/A",
+    "severity": "medium",
+    "treatment": "Apply insecticidal soap or neem oil spray. Introduce ladybugs as natural predators.",
+    "prevention": "Encourage beneficial insects; avoid nitrogen over-fertilisation.",
+    "isHealthy": false
+  },
+  {
+    "id": 1,
+    "name": "armyworm",
+    "displayName": "Armyworm",
+    "crop": "N/A",
+    "severity": "high",
+    "treatment": "Apply Bacillus thuringiensis (Bt) or spinosad-based insecticides at dusk.",
+    "prevention": "Use pheromone traps and practice crop rotation.",
+    "isHealthy": false
+  },
+  {
+    "id": 2,
+    "name": "beetle",
+    "displayName": "Beetle",
+    "crop": "N/A",
+    "severity": "medium",
+    "treatment": "Hand-pick adults; apply pyrethrin if infestation is severe.",
+    "prevention": "Row covers and sticky traps help break the cycle.",
+    "isHealthy": false
+  },
+  {
+    "id": 3,
+    "name": "bollworm",
+    "displayName": "Bollworm",
+    "crop": "N/A",
+    "severity": "high",
+    "treatment": "Apply chlorantraniliprole or Bt. Remove infested plant parts immediately.",
+    "prevention": "Plant early-maturing varieties; use pheromone traps.",
+    "isHealthy": false
+  },
+  {
+    "id": 4,
+    "name": "grasshopper",
+    "displayName": "Grasshopper",
+    "crop": "N/A",
+    "severity": "high",
+    "treatment": "Apply carbaryl or malathion in early morning when pests are sluggish.",
+    "prevention": "Till soil in late summer to expose egg pods; encourage natural predators.",
+    "isHealthy": false
+  },
+  {
+    "id": 5,
+    "name": "mites",
+    "displayName": "Mites",
+    "crop": "N/A",
+    "severity": "medium",
+    "treatment": "Apply miticide or neem oil; ensure adequate soil moisture.",
+    "prevention": "Avoid dusty conditions; maintain proper irrigation.",
+    "isHealthy": false
+  },
+  {
+    "id": 6,
+    "name": "mosquito",
+    "displayName": "Mosquito",
+    "crop": "N/A",
+    "severity": "low",
+    "treatment": "Eliminate standing water; use Bti granules in water bodies.",
+    "prevention": "Improve drainage; use physical barriers.",
+    "isHealthy": false
+  },
+  {
+    "id": 7,
+    "name": "sawfly",
+    "displayName": "Sawfly",
+    "crop": "N/A",
+    "severity": "medium",
+    "treatment": "Hand-pick larvae; apply spinosad or pyrethrin sprays.",
+    "prevention": "Monitor early in the season; encourage parasitic wasps.",
+    "isHealthy": false
+  },
+  {
+    "id": 8,
+    "name": "stem_borer",
+    "displayName": "Stem Borer",
+    "crop": "N/A",
+    "severity": "high",
+    "treatment": "Apply carbofuran or chlorpyrifos at the recommended rate; remove affected tillers.",
+    "prevention": "Use resistant varieties; avoid late planting.",
+    "isHealthy": false
+  }
+]
