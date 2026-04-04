@@ -36,6 +36,28 @@ function getApiBaseUrl(request: Request) {
   return "http://localhost:8000";
 }
 
+function buildProxyHeaders(
+  request: Request,
+  initHeaders?: Record<string, string>,
+) {
+  const headers = new Headers(initHeaders);
+  const forwardedHeaderNames = [
+    "authorization",
+    "cookie",
+    "x-vercel-protection-bypass",
+    "x-vercel-set-bypass-cookie",
+  ];
+
+  for (const headerName of forwardedHeaderNames) {
+    const headerValue = request.headers.get(headerName);
+    if (headerValue) {
+      headers.set(headerName, headerValue);
+    }
+  }
+
+  return headers;
+}
+
 async function readBackendJson(response: Response) {
   try {
     return await response.json();
@@ -56,7 +78,10 @@ export async function GET(request: Request) {
   const backendUrl = `${getApiBaseUrl(request)}/api/v1/measurements/${encodeURIComponent(sessionId)}`;
 
   try {
-    const response = await fetch(backendUrl, { cache: "no-store" });
+    const response = await fetch(backendUrl, {
+      cache: "no-store",
+      headers: buildProxyHeaders(request),
+    });
     const payload = await readBackendJson(response);
 
     if (response.ok || response.status === 202) {
@@ -101,7 +126,7 @@ export async function POST(request: Request) {
     try {
       const response = await fetch(backendUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: buildProxyHeaders(request, { "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
         cache: "no-store",
       });

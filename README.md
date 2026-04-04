@@ -13,7 +13,10 @@ AgriFlow is a Next.js frontend with a FastAPI backend and local model artifacts 
 The phone measurement flow uses the current HTTPS site origin automatically on
 Vercel. `NEXT_PUBLIC_PHONE_BASE_URL` is only needed for local phone testing
 when your app is running on plain HTTP and you want to point the QR code at an
-tunnel such as ngrok. Phone-to-dashboard sync uses the backend database as the
+tunnel such as ngrok. If you open a protected Vercel deployment URL instead of
+your public production alias, set `NEXT_PUBLIC_PHONE_BASE_URL` to the public
+alias or custom domain so the QR code does not point phones at a protected
+deployment hostname. Phone-to-dashboard sync uses the backend database as the
 shared handoff between devices, so keep `DATABASE_URL` configured in deployed
 environments if you want the measurement result to appear in the dashboard chat.
 

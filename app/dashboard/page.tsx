@@ -305,22 +305,24 @@ export default function DashboardPage() {
 
   const resolvePhoneMeasurementOrigin = () => {
     const currentOrigin = window.location.origin.replace(/\/$/, "");
+    const configuredBaseUrl = process.env.NEXT_PUBLIC_PHONE_BASE_URL?.trim().replace(/\/$/, "");
+
+    if (configuredBaseUrl) {
+      try {
+        const url = new URL(configuredBaseUrl);
+        if (url.protocol === "https:") {
+          return url.origin.replace(/\/$/, "");
+        }
+      } catch {
+        return null;
+      }
+    }
 
     if (window.location.protocol === "https:") {
       return currentOrigin;
     }
 
-    const configuredBaseUrl = process.env.NEXT_PUBLIC_PHONE_BASE_URL?.trim().replace(/\/$/, "");
-    if (!configuredBaseUrl) {
-      return null;
-    }
-
-    try {
-      const url = new URL(configuredBaseUrl);
-      return url.protocol === "https:" ? url.origin.replace(/\/$/, "") : null;
-    } catch {
-      return null;
-    }
+    return null;
   };
 
   const openArModal = () => {
@@ -332,7 +334,7 @@ export default function DashboardPage() {
     const host = resolvePhoneMeasurementOrigin();
     if (!host) {
       alert(
-        "Phone camera needs HTTPS. On local dev, set NEXT_PUBLIC_PHONE_BASE_URL to your active ngrok HTTPS URL in .env.local and restart the app. Deployed HTTPS environments work automatically."
+        "Phone camera needs HTTPS. On local dev, set NEXT_PUBLIC_PHONE_BASE_URL to your active ngrok HTTPS URL in .env.local and restart the app. On Vercel, set it to your public alias or custom domain if you are opening a protected deployment URL."
       );
       return;
     }
