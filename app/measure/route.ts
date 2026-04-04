@@ -311,7 +311,14 @@ export async function GET() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId, plant_id: plantId, height_cm: cm })
-    }).then(function(r) { if (!r.ok) throw new Error('Sync failed'); showScreen('done'); })
+    }).then(async function(r) {
+      var data = null;
+      try { data = await r.json(); } catch (e) {}
+      if (!r.ok) {
+        throw new Error((data && (data.detail || data.error || data.message)) || 'Sync failed');
+      }
+      showScreen('done');
+    })
       .catch(function(e) { alert(e.message || 'Network error'); });
   }
 

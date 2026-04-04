@@ -19,6 +19,8 @@ alias or custom domain so the QR code does not point phones at a protected
 deployment hostname. Phone-to-dashboard sync uses the backend database as the
 shared handoff between devices, so keep `DATABASE_URL` configured in deployed
 environments if you want the measurement result to appear in the dashboard chat.
+If you use Supabase on Vercel, prefer the transaction pooler connection string
+for serverless traffic rather than the direct database host.
 
 The Vercel backend uses a slim Python runtime. Climate scoring still runs from
 the bundled climate model, while price forecasting falls back to the static
