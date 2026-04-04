@@ -11,7 +11,7 @@ router = APIRouter(tags=["health"])
 
 
 @router.get("/health")
-def get_health() -> dict[str, object]:
+async def get_health() -> dict[str, object]:
     database_status = "healthy"
     try:
         with SessionLocal() as db:

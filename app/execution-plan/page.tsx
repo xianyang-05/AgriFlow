@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import {
-  Leaf, AlertTriangle, Droplets, CheckCircle2, DollarSign,
+  Leaf, AlertTriangle, Droplets, CheckCircle2,
   Info, ArrowLeft, Send, Sparkles, Youtube, BookOpen, Clock, AlertCircle, RefreshCw, TrendingUp, ChevronLeft, ChevronRight
 } from "lucide-react"
 import {
@@ -137,7 +137,6 @@ function ExecutionPlanPageContent() {
   const [viewMode, setViewMode] = useState<"timeline" | "tasks">("timeline")
   const [metrics, setMetrics] = useState({
     duration: "120 days",
-    profit: 3200,
     yield: 3.8,
     risk: "Medium"
   })
@@ -159,7 +158,6 @@ function ExecutionPlanPageContent() {
     // animate UI numbers
     setMetrics(prev => ({
       ...prev,
-      profit: Math.round(prev.profit * multiplier),
       yield: Number((prev.yield * multiplier).toFixed(1)),
       risk: multiplier > 1.1 ? "Medium" : multiplier < 0.9 ? "Low" : prev.risk
     }))
@@ -201,7 +199,7 @@ function ExecutionPlanPageContent() {
 
       <main className="max-w-7xl mx-auto px-6 py-6">
         {/* Top Metrics Cards under the Toolbar */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <Card className="rounded-2xl border-0 shadow-sm bg-white overflow-hidden">
             <CardContent className="p-4 flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-[#F5F5DC] flex items-center justify-center">
@@ -210,25 +208,6 @@ function ExecutionPlanPageContent() {
               <div>
                 <p className="text-xs uppercase font-bold text-gray-500 tracking-wider">Duration</p>
                 <p className="text-xl font-bold text-[#4e342e]">{metrics.duration}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-2xl border-0 shadow-sm bg-white overflow-hidden">
-            <CardContent className="p-4 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-green-50 flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-xs uppercase font-bold text-gray-500 tracking-wider">Est. Profit</p>
-                <motion.p
-                  key={metrics.profit}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="text-xl font-bold text-green-800"
-                >
-                  ${metrics.profit.toLocaleString()}
-                </motion.p>
               </div>
             </CardContent>
           </Card>

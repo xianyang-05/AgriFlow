@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
+import PaddyFieldLoadingScreen from "@/components/PaddyFieldLoadingScreen"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -37,10 +38,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import {
-  createRecommendation,
+  createPreviewRecommendation,
   getRecommendationErrorMessage,
-  saveLatestRecommendationRunId,
-  saveRecommendationPlan,
 } from "@/lib/recommendations"
 
 const SUPPORTED_AREA_UNIT_REGEX =
@@ -277,7 +276,7 @@ export default function OnboardingPage() {
     const areaText = computedAreaText || formData.farmSize.trim() || null
 
     try {
-      const recommendation = await createRecommendation({
+      const recommendation = await createPreviewRecommendation({
         area_text: areaText,
         budget_text: formData.budget.trim() || null,
         location_text: formData.coordinates
@@ -287,21 +286,23 @@ export default function OnboardingPage() {
         soil_type_text: formData.soilType || null,
       })
 
-      localStorage.setItem(
-        "farmData",
-        JSON.stringify({
-          ...formData,
-          computedAreaText,
-        })
-      )
-      saveRecommendationPlan(recommendation)
-
-      if (!recommendation.run_id) {
-        throw new Error("The backend did not return a plan identifier.")
+      const params = new URLSearchParams()
+      if (areaText) {
+        params.set("area_text", areaText)
       }
-
-      saveLatestRecommendationRunId(recommendation.run_id)
-      router.push(`/planning?runId=${recommendation.run_id}`)
+      if (formData.budget.trim()) {
+        params.set("budget_text", formData.budget.trim())
+      }
+      const locationText = formData.coordinates
+        ? `${formData.coordinates.lat}, ${formData.coordinates.lng}`
+        : formData.location.trim()
+      if (locationText) {
+        params.set("location_text", locationText)
+      }
+      if (formData.soilType) {
+        params.set("soil_type_text", formData.soilType)
+      }
+      router.push(`/planning?${params.toString()}`)
     } catch (error) {
       setSubmitError(getRecommendationErrorMessage(error))
     } finally {
@@ -329,6 +330,15 @@ export default function OnboardingPage() {
 
   const canProceed = isStepComplete(currentStep)
   const computedAreaText = getComputedAreaText()
+
+  if (isSubmitting) {
+    return (
+      <PaddyFieldLoadingScreen
+        title="Growing your smart plan"
+        description="The paddy field keeps growing from seedling to mature stalks while we prepare your farm recommendation."
+      />
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

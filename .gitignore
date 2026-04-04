@@ -16,3 +16,11 @@ node_modules
 .DS_Store
 
 log.txt
+
+# Machine Learning & Datasets Ignore
+plant_data/
+pest_data/
+datasets/
+runs/
+*.pt
+__pycache__/

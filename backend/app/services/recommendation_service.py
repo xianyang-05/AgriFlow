@@ -18,6 +18,7 @@ from app.services.normalization_service import NormalizationService
 from app.services.plan_history_service import PlanHistoryService
 from app.services.price_service import PriceService
 from app.services.suitability_service import SuitabilityService
+from app.seed.crops import SEED_CROPS
 
 
 class RecommendationService:
@@ -55,6 +56,18 @@ class RecommendationService:
         response = self._run_pipeline(run.id, db, raw_input=raw_input, user_preferences=UserPreferences())
         return self.plan_history_service.save_version(db, run.id, response, "initial")
 
+    def preview_recommendation(self, db, raw_input: RawInput) -> RecommendationResponse:
+        response = self._run_pipeline(
+            "preview",
+            db,
+            raw_input=raw_input,
+            user_preferences=UserPreferences(),
+        )
+        response.run_id = None
+        response.version_number = None
+        response.has_previous_version = False
+        return response
+
     def rerun_recommendation(
         self,
         db,
@@ -71,6 +84,23 @@ class RecommendationService:
             user_preferences=user_preferences,
         )
         return self.plan_history_service.save_version(db, run_id, response, version_note)
+
+    def rerun_preview(
+        self,
+        db,
+        normalized_input: NormalizedFarmInput,
+        user_preferences: UserPreferences,
+    ) -> RecommendationResponse:
+        response = self._run_pipeline(
+            "preview",
+            db,
+            normalized_input=normalized_input,
+            user_preferences=user_preferences,
+        )
+        response.run_id = None
+        response.version_number = None
+        response.has_previous_version = False
+        return response
 
     def get_current(self, db, run_id: str) -> RecommendationResponse:
         return self.plan_history_service.get_current(db, run_id)
@@ -126,6 +156,7 @@ class RecommendationService:
                 display_name=pipeline.normalized_input.location_text or "Provided coordinates",
                 confidence=1.0,
             )
+            update_request_logging(geocoding_confidence=1.0)
         else:
             try:
                 pipeline.geocode_result = self.geocoding_service.geocode(
@@ -164,10 +195,7 @@ class RecommendationService:
             pipeline.warnings.extend(exc.warnings)
             pipeline.climate_output = self._build_fallback_climate(pipeline.normalized_input)
 
-        crops = [
-            CropRecord.model_validate(crop)
-            for crop in self.crop_repository.list_crops(db, enabled=True)
-        ]
+        crops = self._load_enabled_crops(db)
         pipeline.suitability_results = self.suitability_service.evaluate_all(
             crops,
             pipeline.normalized_input,
@@ -184,15 +212,16 @@ class RecommendationService:
             eliminated_crop_count=len(pipeline.eliminated_crops),
         )
 
-        scoring_crops = pipeline.eligible_crops
-        if not scoring_crops:
-            pipeline.warnings.append(
-                "No crops passed hard constraints. Showing the highest-scoring fallback crops instead."
+        if not pipeline.eligible_crops:
+            pipeline.status = "no_viable_crops"
+            pipeline.explanation = (
+                "No crops passed the current hard filters for this farm profile. "
+                "Review preferred crops, exclusions, and harvest-speed filters."
             )
-            scoring_crops = self._fallback_scoring_crops(crops, pipeline.user_preferences)
+            return self._build_response(run_id, pipeline)
 
         decision_output = self.decision_service.decide(
-            scoring_crops,
+            pipeline.eligible_crops,
             pipeline.suitability_results,
             pipeline.climate_output,
             pipeline.normalized_input,
@@ -201,7 +230,11 @@ class RecommendationService:
         pipeline.scored_crops = decision_output.ranked_crops
         pipeline.aggressive_plan = decision_output.aggressive_plan
         pipeline.conservative_plan = decision_output.conservative_plan
-        pipeline.status = "complete" if pipeline.scored_crops else "no_viable_crops"
+        pipeline.status = (
+            "complete"
+            if (pipeline.scored_crops or pipeline.aggressive_plan or pipeline.conservative_plan)
+            else "no_viable_crops"
+        )
 
         if not pipeline.scored_crops:
             pipeline.explanation = (
@@ -227,15 +260,28 @@ class RecommendationService:
 
         return self._build_response(run_id, pipeline)
 
-    def _fallback_scoring_crops(
-        self,
-        crops: list[CropRecord],
-        user_preferences: UserPreferences,
-    ) -> list[CropRecord]:
-        not_excluded = [
-            crop for crop in crops if crop.id not in user_preferences.excluded_crops
+    def _load_enabled_crops(self, db) -> list[CropRecord]:
+        crops = [
+            CropRecord.model_validate(crop)
+            for crop in self.crop_repository.list_crops(db, enabled=True)
         ]
-        return not_excluded or crops
+        crop_ids = {crop.id for crop in crops}
+        expected_seed_ids = {crop.id for crop in SEED_CROPS if crop.enabled}
+        missing_seed_crop_ids = sorted(expected_seed_ids - crop_ids)
+
+        if missing_seed_crop_ids:
+            self.crop_repository.upsert_crops(db, SEED_CROPS)
+            crops = [
+                CropRecord.model_validate(crop)
+                for crop in self.crop_repository.list_crops(db, enabled=True)
+            ]
+            crop_ids = {crop.id for crop in crops}
+
+        update_request_logging(
+            available_crop_ids=sorted(crop_ids),
+            missing_seed_crop_ids=missing_seed_crop_ids,
+        )
+        return crops
 
     def _build_response(self, run_id: str, pipeline: PipelineResult) -> RecommendationResponse:
         return RecommendationResponse(

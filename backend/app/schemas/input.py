@@ -6,6 +6,22 @@ from pydantic import BaseModel, Field, field_validator
 SoilType = Literal["loamy", "clay", "sandy", "silt", "peat", "chalky"]
 
 
+def _normalize_crop_ids(value: list[str] | str | None) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = [value]
+
+    normalized: list[str] = []
+    for crop_id in value:
+        if not crop_id:
+            continue
+        normalized_id = crop_id.strip().lower().replace("-", "_").replace(" ", "_")
+        if normalized_id:
+            normalized.append(normalized_id)
+    return normalized
+
+
 class RawInput(BaseModel):
     area_text: str | None = None
     budget_text: str | None = None
@@ -51,3 +67,8 @@ class UserPreferences(BaseModel):
     risk_preference: str | None = None
     harvest_preference: str | None = None
     notes: str | None = None
+
+    @field_validator("preferred_crops", "excluded_crops", mode="before")
+    @classmethod
+    def normalize_crop_preferences(cls, value: list[str] | str | None) -> list[str]:
+        return _normalize_crop_ids(value)
