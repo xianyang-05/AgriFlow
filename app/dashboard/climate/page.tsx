@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
@@ -6,8 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { 
-  Cloud, Sun, CloudRain, Droplets, ThermometerSun, Wind, 
+import {
+  Cloud, Sun, CloudRain, Droplets, ThermometerSun, Wind,
   AlertTriangle, CheckCircle2, ArrowRight, Waves, Flame,
   CloudSun, Snowflake, Loader2, ShieldAlert, ChevronRight,
   VolumeX, Volume2, Ruler
@@ -43,7 +43,7 @@ const WeatherAudio = ({ src, isSoundEnabled }: { src: string, isSoundEnabled: bo
   const audioRef = useRef<HTMLAudioElement>(null);
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.volume = 1.0; 
+      audioRef.current.volume = 1.0;
       if (isSoundEnabled) {
         audioRef.current.play().catch(e => console.log("Audio playback blocked.", e));
       } else {
@@ -289,7 +289,7 @@ export default function ClimatePage() {
             </p>
           </div>
           <div className="ml-auto">
-            <button 
+            <button
               onClick={() => setIsSoundEnabled(!isSoundEnabled)}
               className="bg-muted hover:bg-muted/80 p-2.5 rounded-full transition-all border border-border"
               title={isSoundEnabled ? "Disable sounds" : "Enable sounds"}
@@ -312,8 +312,8 @@ export default function ClimatePage() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Current Weather</p>
-                  <p className="text-5xl font-bold text-foreground">{today.high}°C</p>
-                  <p className="text-muted-foreground mt-1">Sunny, feels like {today.high + 2}°C</p>
+                  <p className="text-5xl font-bold text-foreground">{today.high}{"\u00B0"}C</p>
+                  <p className="text-muted-foreground mt-1">Sunny, feels like {today.high + 2}{"\u00B0"}C</p>
                 </div>
               </div>
               <div className="grid grid-cols-4 gap-6">
@@ -366,9 +366,8 @@ export default function ClimatePage() {
                   {forecastData.map((day, index) => (
                     <div
                       key={day.day}
-                      className={`p-3 rounded-xl text-center transition-colors ${
-                        index === 0 ? "bg-primary/10 border border-primary/30" : "bg-muted/50 hover:bg-muted"
-                      }`}
+                      className={`p-3 rounded-xl text-center transition-colors ${index === 0 ? "bg-primary/10 border border-primary/30" : "bg-muted/50 hover:bg-muted"
+                        }`}
                     >
                       <p className={`text-sm font-medium ${index === 0 ? "text-primary" : "text-foreground"}`}>
                         {day.day}
@@ -376,8 +375,8 @@ export default function ClimatePage() {
                       <div className="my-3 flex justify-center">
                         {getWeatherIcon(day.icon)}
                       </div>
-                      <p className="text-lg font-semibold text-foreground">{day.high}°</p>
-                      <p className="text-xs text-muted-foreground">{day.low}°</p>
+                      <p className="text-lg font-semibold text-foreground">{day.high}{"\u00B0"}</p>
+                      <p className="text-xs text-muted-foreground">{day.low}{"\u00B0"}</p>
                       {day.rain > 0 && (
                         <div className="flex items-center justify-center gap-1 mt-2">
                           <Droplets className="h-3 w-3 text-info" />
@@ -390,63 +389,44 @@ export default function ClimatePage() {
               </CardContent>
             </Card>
 
-            {/* Temperature Chart */}
+            {/* Forecast Weather */}
             <Card className="shadow-lg shadow-primary/5">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <ThermometerSun className="h-5 w-5 text-primary" />
-                  Today&apos;s Temperature
+                  <Cloud className="h-5 w-5 text-primary" />
+                  Forecast Weather
                 </CardTitle>
-                <CardDescription>Hourly temperature and humidity</CardDescription>
+                <CardDescription>7-day temperature, rainfall, and sky outlook</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={temperatureHistory}>
-                      <defs>
-                        <linearGradient id="tempGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="var(--color-warning)" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="var(--color-warning)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis dataKey="hour" className="text-xs" />
-                      <YAxis className="text-xs" />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "var(--color-card)",
-                          borderColor: "var(--color-border)",
-                          borderRadius: "8px",
-                        }}
-                      />
-                      <Area
-                        type="monotone"
-                        dataKey="temp"
-                        stroke="var(--color-warning)"
-                        fill="url(#tempGradient)"
-                        strokeWidth={2}
-                        name="Temperature (°C)"
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="humidity"
-                        stroke="var(--color-info)"
-                        strokeWidth={2}
-                        dot={false}
-                        name="Humidity (%)"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex gap-6 mt-4">
-                  <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full bg-warning" />
-                    <span className="text-sm text-muted-foreground">Temperature</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-3 w-3 rounded-full bg-info" />
-                    <span className="text-sm text-muted-foreground">Humidity</span>
-                  </div>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+                  {forecastData.map((day, index) => (
+                    <div
+                      key={day.day}
+                      className={`rounded-2xl border p-3 text-center transition-colors ${index === 0
+                          ? "border-primary/25 bg-primary/8 shadow-sm"
+                          : "border-border/60 bg-muted/40 hover:bg-muted/60"
+                        }`}
+                    >
+                      <p className={`text-sm font-medium ${index === 0 ? "text-primary" : "text-foreground"}`}>
+                        {day.day}
+                      </p>
+                      <div className="my-3 flex justify-center">
+                        {getWeatherIcon(day.icon)}
+                      </div>
+                      <div className="flex items-center justify-center gap-2 text-foreground">
+                        <span className="text-lg font-semibold">{day.high}°</span>
+                        <span className="text-xs text-muted-foreground">{day.low}°</span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-center gap-1 text-xs text-info">
+                        <Droplets className="h-3 w-3" />
+                        <span>{day.rain}mm</span>
+                      </div>
+                      <p className="mt-2 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                        {day.icon.replace("-", " ")}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -459,11 +439,10 @@ export default function ClimatePage() {
               <div className="pointer-events-none absolute -left-16 top-12 h-32 w-32 rounded-full bg-emerald-200/20 blur-2xl" />
               <CardHeader>
                 <div className="mb-3 flex items-center gap-3">
-                  <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${
-                    floodRisk === "high"
+                  <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${floodRisk === "high"
                       ? "border-destructive/25 bg-destructive/10 text-destructive"
                       : "border-emerald-200 bg-emerald-100/80 text-emerald-700"
-                  }`}>
+                    }`}>
                     <ShieldAlert className="h-5 w-5" />
                   </div>
                   <div className="space-y-1">
@@ -480,116 +459,116 @@ export default function ClimatePage() {
                 </CardDescription>
                 <CardTitle className="hidden">
                   <Waves className={`h-5 w-5 ${floodRisk === "high" ? "text-destructive" : "text-primary"}`} />
-                  Hydrological Forecast & Flood Risk 🌊
+                  Hydrological Forecast & Flood Risk ðŸŒŠ
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <>
-                    {seasonalError && (
-                      <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-foreground">
-                        {seasonalError}
+                  {seasonalError && (
+                    <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-foreground">
+                      {seasonalError}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Flood Warning */}
+                    <div className={`rounded-2xl border p-5 shadow-sm ${floodRisk === "high" ? "border-destructive/30 bg-destructive/10" : "border-border bg-white/75"}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertTriangle className={`h-4 w-4 ${floodRisk === "high" ? "text-destructive" : "text-muted-foreground"}`} />
+                        <h4 className="font-semibold text-foreground">Flood Alert</h4>
                       </div>
-                    )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Flood Warning */}
-                      <div className={`rounded-2xl border p-5 shadow-sm ${floodRisk === "high" ? "border-destructive/30 bg-destructive/10" : "border-border bg-white/75"}`}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <AlertTriangle className={`h-4 w-4 ${floodRisk === "high" ? "text-destructive" : "text-muted-foreground"}`} />
-                          <h4 className="font-semibold text-foreground">Flood Alert</h4>
-                        </div>
-                        {floodRisk === "high" ? (
-                          <p className="text-sm text-destructive font-medium">
-                            Heavy rain expected (&gt;{Math.max(...seasonalData.map(d => d.rainfall), fallbackMaxRainfall).toFixed(0)}mm) → Potential flooding → Recommend drainage
-                          </p>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">Standard rainfall expected. Routine monitoring advised.</p>
-                        )}
-                      </div>
-
-                      {/* Drainage Plan */}
-                      <div className="rounded-2xl border border-sky-200 bg-sky-50/80 p-5 shadow-sm">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Waves className="h-4 w-4 text-sky-600" />
-                          <h4 className="font-semibold text-foreground">Drainage Response</h4>
-                        </div>
-                        <p className="text-sm text-foreground">
-                          {floodRisk === "high" ? "Activate secondary pumps by mid-month. Clean main canal immediately." : "Maintain normal drainage operations."}
+                      {floodRisk === "high" ? (
+                        <p className="text-sm text-destructive font-medium">
+                          Heavy rain expected (&gt;{Math.max(...seasonalData.map(d => d.rainfall), fallbackMaxRainfall).toFixed(0)}mm) {"\u2192"} Potential flooding {"\u2192"} Recommend drainage
                         </p>
-                      </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Standard rainfall expected. Routine monitoring advised.</p>
+                      )}
                     </div>
 
-                    {/* Crop Loss Estimate */}
-                    <div className="rounded-2xl border border-border bg-white/80 p-5 shadow-sm">
-                      <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                        <ArrowRight className="h-4 w-4 text-warning" />
-                        Estimated Crop Exposure
-                      </h4>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-muted-foreground">Estimated Exposure</span>
-                        <span className="font-semibold text-destructive">{floodRisk === "high" ? "35%" : "5%"} at risk</span>
+                    {/* Drainage Plan */}
+                    <div className="rounded-2xl border border-sky-200 bg-sky-50/80 p-5 shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Waves className="h-4 w-4 text-sky-600" />
+                        <h4 className="font-semibold text-foreground">Drainage Response</h4>
                       </div>
-                      <Progress value={floodRisk === "high" ? 35 : 5} className="h-2 mb-2 bg-muted" aria-label="Crop Loss Progress" />
-                      <p className="text-xs text-muted-foreground text-right">
-                        Potential financial impact: <span className="font-semibold text-foreground">RM {floodRisk === "high" ? "12,500" : "1,800"}</span>
+                      <p className="text-sm text-foreground">
+                        {floodRisk === "high" ? "Activate secondary pumps by mid-month. Clean main canal immediately." : "Maintain normal drainage operations."}
                       </p>
                     </div>
+                  </div>
 
-                    {/* Insurance Advisory CTA */}
-                    {floodRisk === "high" && (
+                  {/* Crop Loss Estimate */}
+                  <div className="rounded-2xl border border-border bg-white/80 p-5 shadow-sm">
+                    <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                      <ArrowRight className="h-4 w-4 text-warning" />
+                      Estimated Crop Exposure
+                    </h4>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-muted-foreground">Estimated Exposure</span>
+                      <span className="font-semibold text-destructive">{floodRisk === "high" ? "35%" : "5%"} at risk</span>
+                    </div>
+                    <Progress value={floodRisk === "high" ? 35 : 5} className="h-2 mb-2 bg-muted" aria-label="Crop Loss Progress" />
+                    <p className="text-xs text-muted-foreground text-right">
+                      Potential financial impact: <span className="font-semibold text-foreground">RM {floodRisk === "high" ? "12,500" : "1,800"}</span>
+                    </p>
+                  </div>
+
+                  {/* Insurance Advisory CTA */}
+                  {floodRisk === "high" && (
                     <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-emerald-100/70 p-5">
-                        <div>
-                          <h4 className="font-semibold text-emerald-800">Recommended Protection Plan</h4>
-                          <p className="text-sm text-emerald-700/90">Secure subsidized crop cover before flood exposure rises further.</p>
-                        </div>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700">
-                              Explore Coverage
-                              <ChevronRight className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[720px]">
-                            <DialogHeader>
-                              <DialogTitle className="flex items-center gap-2">
-                                <CheckCircle2 className="h-5 w-5 text-primary" />
-                                Enroll in Agrobank STTP
-                              </DialogTitle>
-                              <DialogDescription>
-                                High flood risk detected. Secure your crop with Malaysia's subsidized paddy insurance.
-                              </DialogDescription>
-                            </DialogHeader>
-                            
-                            <div className="space-y-4 py-4">
-                              <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Coverage</span>
-                                  <span className="font-medium">Flood, Drought, Pests</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Estimated Premium</span>
-                                  <span className="font-medium">RM 64.80 / ha</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Max Payout</span>
-                                  <span className="font-bold text-success">RM 3,000 / ha</span>
-                                </div>
+                      <div>
+                        <h4 className="font-semibold text-emerald-800">Recommended Protection Plan</h4>
+                        <p className="text-sm text-emerald-700/90">Secure subsidized crop cover before flood exposure rises further.</p>
+                      </div>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+                            Explore Coverage
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="top-4 max-h-[calc(100vh-2rem)] max-w-[calc(100vw-1rem)] translate-y-0 overflow-x-hidden overflow-y-auto sm:top-6 sm:max-w-[980px]">
+                          <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                              <CheckCircle2 className="h-5 w-5 text-primary" />
+                              Enroll in Agrobank STTP
+                            </DialogTitle>
+                            <DialogDescription>
+                              High flood risk detected. Secure your crop with Malaysia's subsidized paddy insurance.
+                            </DialogDescription>
+                          </DialogHeader>
+
+                          <div className="space-y-4 py-4">
+                            <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Coverage</span>
+                                <span className="font-medium">Flood, Drought, Pests</span>
                               </div>
-                              
-                              <div className="text-xs text-muted-foreground">
-                                * Offline Registration required at your nearest Agrobank branch or PPK.
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Estimated Premium</span>
+                                <span className="font-medium">RM 64.80 / ha</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Max Payout</span>
+                                <span className="font-bold text-success">RM 3,000 / ha</span>
                               </div>
                             </div>
 
-                            <div className="flex flex-col gap-2">
-                              <InsurancePdfButton />
-                              <Button variant="outline" onClick={() => window.open("https://www.agrobank.com.my", "_blank")} className="w-full">
-                                Find Nearest Branch
-                              </Button>
+                            <div className="text-xs text-muted-foreground">
+                              * Offline Registration required at your nearest Agrobank branch or PPK.
                             </div>
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-                    )}
+                          </div>
+
+                          <div className="flex flex-col gap-2">
+                            <InsurancePdfButton />
+                            <Button variant="outline" onClick={() => window.open("https://www.agrobank.com.my", "_blank")} className="w-full">
+                              Find Nearest Branch
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  )}
                 </>
               </CardContent>
             </Card>
@@ -599,11 +578,10 @@ export default function ClimatePage() {
               <div className="pointer-events-none absolute bottom-[-7rem] left-[-4rem] h-64 w-64 rounded-full bg-orange-200/20 blur-3xl" />
               <CardHeader className="relative space-y-4 pb-2">
                 <div className="flex items-start gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-sm ${
-                    floodRisk === "high"
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-sm ${floodRisk === "high"
                       ? "border-destructive/25 bg-destructive/10 text-destructive"
                       : "border-rose-200 bg-rose-100/80 text-rose-700"
-                  }`}>
+                    }`}>
                     <ShieldAlert className="h-4 w-4" />
                   </div>
                   <div className="space-y-1">
@@ -634,9 +612,8 @@ export default function ClimatePage() {
                           Compact decision and enrollment details.
                         </p>
                       </div>
-                        <Badge className={`w-fit px-2 py-0.5 text-[10px] ${
-                          floodRisk === "high"
-                            ? "border-destructive/25 bg-destructive/15 text-destructive"
+                      <Badge className={`w-fit px-2 py-0.5 text-[10px] ${floodRisk === "high"
+                          ? "border-destructive/25 bg-destructive/15 text-destructive"
                           : "border-rose-300/60 bg-rose-50 text-rose-800"
                         }`}>
                         {floodRisk === "high" ? "Urgent" : "Ready"}
@@ -687,11 +664,10 @@ export default function ClimatePage() {
                           Reduce uninsured flood exposure and protect recovery cash flow with subsidized coverage.
                         </p>
                       </div>
-                      <Badge className={`shrink-0 px-2.5 py-0.5 text-[10px] ${
-                        floodRisk === "high"
+                      <Badge className={`shrink-0 px-2.5 py-0.5 text-[10px] ${floodRisk === "high"
                           ? "border-destructive/25 bg-destructive/15 text-destructive"
                           : "border-rose-300/60 bg-white/80 text-rose-800"
-                      }`}>
+                        }`}>
                         {floodRisk === "high" ? "Action Needed" : "Recommended"}
                       </Badge>
                     </div>
@@ -721,7 +697,7 @@ export default function ClimatePage() {
                                 <ChevronRight className="h-5 w-5" />
                               </Button>
                             </DialogTrigger>
-                            <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[720px]">
+                            <DialogContent className="max-h-[92vh] max-w-[calc(100vw-1.5rem)] overflow-x-hidden overflow-y-auto sm:max-w-[860px]">
                               <DialogHeader>
                                 <DialogTitle className="flex items-center gap-2">
                                   <CheckCircle2 className="h-5 w-5 text-primary" />
@@ -734,17 +710,17 @@ export default function ClimatePage() {
 
                               <div className="space-y-4 py-4">
                                 <div className="rounded-lg bg-muted p-4 text-sm">
-                                  <div className="flex justify-between">
+                                  <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] items-start gap-3">
                                     <span className="text-muted-foreground">Coverage</span>
-                                    <span className="font-medium">Flood, Drought, Pests</span>
+                                    <span className="min-w-0 text-right font-medium break-words">Flood, Drought, Pests</span>
                                   </div>
-                                  <div className="mt-2 flex justify-between">
+                                  <div className="mt-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] items-start gap-3">
                                     <span className="text-muted-foreground">Estimated Premium</span>
-                                    <span className="font-medium">RM 64.80 / ha</span>
+                                    <span className="min-w-0 text-right font-medium break-words">RM 64.80 / ha</span>
                                   </div>
-                                  <div className="mt-2 flex justify-between">
+                                  <div className="mt-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] items-start gap-3">
                                     <span className="text-muted-foreground">Max Payout</span>
-                                    <span className="font-bold text-success">RM 3,000 / ha</span>
+                                    <span className="min-w-0 text-right font-bold text-success break-words">RM 3,000 / ha</span>
                                   </div>
                                 </div>
                                 <div className="text-xs text-muted-foreground">
@@ -839,7 +815,7 @@ export default function ClimatePage() {
                     <ThermometerSun className="h-4 w-4 text-warning" />
                     <span className="text-sm text-muted-foreground">Avg Temperature</span>
                   </div>
-                  <span className="font-semibold text-foreground">28°C</span>
+                  <span className="font-semibold text-foreground">28{"\u00B0"}C</span>
                 </div>
                 <div className="flex items-center justify-between p-3 rounded-xl bg-muted/50">
                   <div className="flex items-center gap-2">
@@ -865,3 +841,5 @@ export default function ClimatePage() {
     </div>
   )
 }
+
+
