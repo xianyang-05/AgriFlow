@@ -1,8 +1,10 @@
+import os
 from collections.abc import Generator
 
 from sqlalchemy import JSON, Text, create_engine
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from app.config import get_settings
 
@@ -19,7 +21,19 @@ class Base(DeclarativeBase):
 
 
 settings = get_settings()
-engine = create_engine(settings.database_url, pool_pre_ping=True)
+engine_kwargs: dict[str, object] = {
+    "pool_pre_ping": True,
+}
+
+if settings.database_url.startswith("postgresql+psycopg://"):
+    # Supabase transaction pooler does not support prepared statements.
+    engine_kwargs["connect_args"] = {"prepare_threshold": None}
+
+if os.getenv("VERCEL"):
+    # Serverless functions should not keep a process-local connection pool.
+    engine_kwargs["poolclass"] = NullPool
+
+engine = create_engine(settings.database_url, **engine_kwargs)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 
 

@@ -12,6 +12,11 @@ from app.schemas.chat import ChatUpdatePayload, IntentClassification
 from app.schemas.decision import ExplanationInput
 from app.schemas.input import RawInput
 
+DEFAULT_OLLAMA_TEXT_MODEL = "llama3.2"
+MODEL_FALLBACKS = {
+    "llama3": DEFAULT_OLLAMA_TEXT_MODEL,
+}
+
 
 class LLMService:
     def __init__(self) -> None:
@@ -26,10 +31,19 @@ class LLMService:
             ollama_authenticated=self._ollama_authenticated,
         )
 
-    def _generate(self, system_prompt: str, user_prompt: str, *, json_mode: bool = False) -> str:
+    def _generate(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        json_mode: bool = False,
+        model: str | None = None,
+        attempted_models: tuple[str, ...] = (),
+    ) -> str:
+        active_model = (model or self.settings.ollama_model).strip() or DEFAULT_OLLAMA_TEXT_MODEL
         prompt = f"System: {system_prompt}\nUser: {user_prompt}\nAssistant:"
         payload: dict[str, Any] = {
-            "model": self.settings.ollama_model,
+            "model": active_model,
             "prompt": prompt,
             "stream": False,
         }
@@ -39,6 +53,15 @@ class LLMService:
         try:
             with httpx.Client(timeout=self.settings.request_timeout_seconds, headers=self._request_headers()) as client:
                 response = client.post(f"{self._ollama_base_url}/api/generate", json=payload)
+                fallback_model = self._fallback_model(active_model, response, attempted_models)
+                if fallback_model:
+                    return self._generate(
+                        system_prompt,
+                        user_prompt,
+                        json_mode=json_mode,
+                        model=fallback_model,
+                        attempted_models=(*attempted_models, active_model),
+                    )
                 response.raise_for_status()
         except httpx.HTTPError as exc:
             self._log_http_error(
@@ -67,12 +90,27 @@ class LLMService:
             except json.JSONDecodeError as exc:
                 raise LLMError("LLM did not return valid JSON") from exc
 
-    def _chat(self, system_prompt: str, user_prompt: str, *, json_mode: bool = False) -> str:
+    def _chat(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        *,
+        json_mode: bool = False,
+        model: str | None = None,
+        attempted_models: tuple[str, ...] = (),
+    ) -> str:
+        active_model = (model or self.settings.ollama_model).strip() or DEFAULT_OLLAMA_TEXT_MODEL
         if self._chat_endpoint_available is False:
-            return self._generate(system_prompt, user_prompt, json_mode=json_mode)
+            return self._generate(
+                system_prompt,
+                user_prompt,
+                json_mode=json_mode,
+                model=active_model,
+                attempted_models=attempted_models,
+            )
 
         payload: dict[str, Any] = {
-            "model": self.settings.ollama_model,
+            "model": active_model,
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -85,6 +123,15 @@ class LLMService:
         try:
             with httpx.Client(timeout=self.settings.request_timeout_seconds, headers=self._request_headers()) as client:
                 response = client.post(f"{self._ollama_base_url}/api/chat", json=payload)
+                fallback_model = self._fallback_model(active_model, response, attempted_models)
+                if fallback_model:
+                    return self._chat(
+                        system_prompt,
+                        user_prompt,
+                        json_mode=json_mode,
+                        model=fallback_model,
+                        attempted_models=(*attempted_models, active_model),
+                    )
                 if response.status_code == 404:
                     self._chat_endpoint_available = False
                     self.logger.warning(
@@ -93,7 +140,13 @@ class LLMService:
                         fallback_endpoint="/api/generate",
                         status_code=response.status_code,
                     )
-                    return self._generate(system_prompt, user_prompt, json_mode=json_mode)
+                    return self._generate(
+                        system_prompt,
+                        user_prompt,
+                        json_mode=json_mode,
+                        model=active_model,
+                        attempted_models=attempted_models,
+                    )
                 response.raise_for_status()
                 self._chat_endpoint_available = True
         except httpx.HTTPError as exc:
@@ -251,6 +304,35 @@ class LLMService:
         if response.status_code >= 500:
             return "provider_error"
         return "request_error"
+
+    def _fallback_model(
+        self,
+        model: str,
+        response: httpx.Response,
+        attempted_models: tuple[str, ...],
+    ) -> str | None:
+        if not self._is_model_not_found_response(response, model):
+            return None
+
+        fallback_model = MODEL_FALLBACKS.get(model.strip())
+        if not fallback_model or fallback_model == model or fallback_model in attempted_models:
+            return None
+
+        self.logger.warning(
+            "ollama.model_fallback",
+            endpoint=response.request.url.path,
+            missing_model=model,
+            fallback_model=fallback_model,
+            status_code=response.status_code,
+        )
+        return fallback_model
+
+    def _is_model_not_found_response(self, response: httpx.Response, model: str) -> bool:
+        if response.status_code != 404:
+            return False
+
+        preview = (self._response_preview(response) or "").lower()
+        return "model" in preview and "not found" in preview and model.lower() in preview
 
     def _health_payload(
         self,

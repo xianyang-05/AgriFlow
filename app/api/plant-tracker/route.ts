@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { callOllamaChat, OllamaRequestError } from "@/lib/server/ollama"
-
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llava"
-const OLLAMA_VISION_MODEL = process.env.OLLAMA_VISION_MODEL || OLLAMA_MODEL
+import { callOllamaChat, getOllamaConfig, OllamaRequestError } from "@/lib/server/ollama"
 
 const SYSTEM_PROMPT = `You are AgriFlow Plant Tracker, an expert botanical AI assistant. The user monitors a tomato plant on the Dashboard.
 
@@ -26,12 +23,9 @@ RULES:
 - Be encouraging but honest about slow progress.
 - When given a photo, replace "Height Check" with "🌿 Visual Check" describing what you see.`
 
-type ChatMessage = {
-  role: string
-  content: string
-}
-
 export async function POST(request: NextRequest) {
+  const ollamaConfig = getOllamaConfig()
+  let requestedModel = ollamaConfig.model
   try {
     const body = await request.json()
     const {
@@ -61,7 +55,8 @@ export async function POST(request: NextRequest) {
     }
 
     const useVision = Array.isArray(images) && images.length > 0
-    const model = useVision ? OLLAMA_VISION_MODEL : OLLAMA_MODEL
+    const model = useVision ? ollamaConfig.visionModel : ollamaConfig.model
+    requestedModel = model
 
     const historyMsgs = (chatHistory || []).map((msg: { role: string; content: string }) => ({
       role: msg.role === "ai" ? "assistant" : "user",
@@ -97,7 +92,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (error instanceof OllamaRequestError) {
       console.error("[plant-tracker] ollama_request_failed", {
+        authenticated: ollamaConfig.authenticated,
+        baseUrlHost: ollamaConfig.baseUrlHost,
         errorKind: error.kind,
+        model: requestedModel,
         status: error.status,
       })
     } else {

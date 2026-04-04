@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/agriflow"
     ollama_base_url: str = "https://ollama.com"
     ollama_api_key: str = ""
-    ollama_model: str = "llava"
+    ollama_model: str = "llama3.2"
     nominatim_base_url: str = "https://nominatim.openstreetmap.org"
     open_elevation_base_url: str = "https://api.open-elevation.com/api/v1"
     climate_model_path: str | None = "climate_model_v2.joblib"

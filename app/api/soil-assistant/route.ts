@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
     }
 
     const ollamaPayload: Record<string, unknown> = {
+      model: image ? ollamaConfig.visionModel : ollamaConfig.model,
       prompt: `${SYSTEM_PROMPT}\n\nUser: ${userPrompt}`,
       stream: false,
     }
@@ -104,7 +105,7 @@ export async function POST(request: NextRequest) {
         parseAIResponse(responseText, {
           hasDescription: Boolean(trimmedDescription),
           hasImage: Boolean(image),
-          model: ollamaConfig.model,
+          model: String(ollamaPayload.model),
           provider: "ollama",
         })
       )
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest) {
           errorKind: error.kind,
           hasDescription: Boolean(trimmedDescription),
           hasImage: Boolean(image),
-          model: ollamaConfig.model,
+          model: String(ollamaPayload.model),
           status: error.status,
         })
       }

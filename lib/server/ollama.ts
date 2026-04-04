@@ -10,8 +10,12 @@ type OllamaErrorKind =
 type OllamaContext = Record<string, unknown>
 
 const DEFAULT_OLLAMA_BASE_URL = "https://ollama.com"
-const DEFAULT_OLLAMA_MODEL = "llava"
+const DEFAULT_OLLAMA_TEXT_MODEL = "llama3.2"
+const DEFAULT_OLLAMA_VISION_MODEL = "llava"
 const DEFAULT_TIMEOUT_MS = 10_000
+const MODEL_FALLBACKS: Record<string, string> = {
+  llama3: DEFAULT_OLLAMA_TEXT_MODEL,
+}
 
 export class OllamaRequestError extends Error {
   kind: OllamaErrorKind
@@ -41,7 +45,8 @@ export function getOllamaConfig() {
     authenticated: Boolean(apiKey),
     baseUrl,
     baseUrlHost: safeUrlHost(baseUrl),
-    model: process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL,
+    model: process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_TEXT_MODEL,
+    visionModel: process.env.OLLAMA_VISION_MODEL || DEFAULT_OLLAMA_VISION_MODEL,
     timeoutMs,
   }
 }
@@ -86,58 +91,83 @@ async function requestOllamaJson<T>(
   context: OllamaContext,
 ) {
   const config = getOllamaConfig()
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), config.timeoutMs)
   const url = `${config.baseUrl}${endpoint}`
+  const initialModel = resolveRequestedModel(
+    payload,
+    payloadHasImages(payload) ? config.visionModel : config.model,
+  )
+  const attemptedModels = new Set<string>()
+  let activeModel = initialModel
 
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: buildHeaders(config.apiKey),
-      body: JSON.stringify({
-        model: config.model,
-        ...payload,
-      }),
-      cache: "no-store",
-      signal: controller.signal,
-    })
+  while (true) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), config.timeoutMs)
 
-    if (!response.ok) {
-      const details = trimDetails(await response.text())
-      const kind = classifyStatus(response.status)
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: buildHeaders(config.apiKey),
+        body: JSON.stringify({
+          ...payload,
+          model: activeModel,
+        }),
+        cache: "no-store",
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        const details = trimDetails(await response.text())
+        const fallbackModel = selectFallbackModel(response.status, details, activeModel, attemptedModels)
+        if (fallbackModel) {
+          attemptedModels.add(activeModel)
+          logOllamaEvent("warn", "model_fallback", {
+            ...context,
+            authenticated: config.authenticated,
+            baseUrlHost: config.baseUrlHost,
+            endpoint,
+            fallbackModel,
+            missingModel: activeModel,
+            status: response.status,
+          })
+          activeModel = fallbackModel
+          continue
+        }
+
+        const kind = classifyStatus(response.status)
+        logOllamaEvent("error", "request_failed", {
+          ...context,
+          authenticated: config.authenticated,
+          baseUrlHost: config.baseUrlHost,
+          details,
+          endpoint,
+          errorKind: kind,
+          model: activeModel,
+          status: response.status,
+        })
+        throw new OllamaRequestError("Ollama request failed.", kind, response.status, details)
+      }
+
+      return (await response.json()) as T
+    } catch (error) {
+      if (error instanceof OllamaRequestError) {
+        throw error
+      }
+
+      const normalized = normalizeThrownError(error)
       logOllamaEvent("error", "request_failed", {
         ...context,
         authenticated: config.authenticated,
         baseUrlHost: config.baseUrlHost,
-        details,
         endpoint,
-        errorKind: kind,
-        model: config.model,
-        status: response.status,
+        error: normalized.message,
+        errorKind: normalized.kind,
+        model: activeModel,
+        status: normalized.status,
       })
-      throw new OllamaRequestError("Ollama request failed.", kind, response.status, details)
+      throw normalized
+    } finally {
+      clearTimeout(timeout)
     }
-
-    return (await response.json()) as T
-  } catch (error) {
-    if (error instanceof OllamaRequestError) {
-      throw error
-    }
-
-    const normalized = normalizeThrownError(error)
-    logOllamaEvent("error", "request_failed", {
-      ...context,
-      authenticated: config.authenticated,
-      baseUrlHost: config.baseUrlHost,
-      endpoint,
-      error: normalized.message,
-      errorKind: normalized.kind,
-      model: config.model,
-      status: normalized.status,
-    })
-    throw normalized
-  } finally {
-    clearTimeout(timeout)
   }
 }
 
@@ -160,6 +190,48 @@ function safeUrlHost(baseUrl: string) {
   } catch {
     return baseUrl
   }
+}
+
+function payloadHasImages(payload: Record<string, unknown>) {
+  return Array.isArray(payload.images) && payload.images.length > 0
+}
+
+function resolveRequestedModel(payload: Record<string, unknown>, defaultModel: string) {
+  const requestedModel = payload.model
+  return typeof requestedModel === "string" && requestedModel.trim()
+    ? requestedModel.trim()
+    : defaultModel
+}
+
+function selectFallbackModel(
+  status: number,
+  details: string | undefined,
+  activeModel: string,
+  attemptedModels: Set<string>,
+) {
+  if (!isModelNotFound(status, details, activeModel)) {
+    return undefined
+  }
+
+  const fallbackModel = MODEL_FALLBACKS[activeModel]
+  if (!fallbackModel || fallbackModel === activeModel || attemptedModels.has(fallbackModel)) {
+    return undefined
+  }
+
+  return fallbackModel
+}
+
+function isModelNotFound(status: number, details: string | undefined, activeModel: string) {
+  if (status !== 404 || !details) {
+    return false
+  }
+
+  const normalizedDetails = details.toLowerCase()
+  return (
+    normalizedDetails.includes("model") &&
+    normalizedDetails.includes("not found") &&
+    normalizedDetails.includes(activeModel.toLowerCase())
+  )
 }
 
 function trimDetails(value: string) {
