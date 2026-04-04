@@ -4,11 +4,10 @@ import { useState, useCallback, useRef, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Slider } from "@/components/ui/slider"
 import { Progress } from "@/components/ui/progress"
 import {
   Bug, Upload, ImageIcon, AlertTriangle, CheckCircle2,
-  MapPin, Calendar, Leaf, FlaskConical, Info,
+  MapPin, Calendar, Leaf, FlaskConical,
   ScanLine, RefreshCw, ChevronDown, ChevronUp, Cpu, Zap,
   CircleAlert, CircleCheck, Sparkles, FileWarning,
 } from "lucide-react"
@@ -57,7 +56,6 @@ export default function PestDetectionPage() {
   const [loadProgress, setLoadProgress] = useState(0)
   const [isAnalyzing, setIsAnalyzing]   = useState(false)
   const [detections, setDetections]     = useState<Detection[]>([])
-  const [threshold, setThreshold]        = useState(0.30)
   const [expandedIdx, setExpandedIdx]   = useState<number | null>(0)
   const [origSize, setOrigSize]          = useState<{ w: number; h: number } | null>(null)
   const [error, setError]               = useState<string | null>(null)
@@ -127,7 +125,7 @@ export default function PestDetectionPage() {
     }
     reader.readAsDataURL(file)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threshold])
+  }, [])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -146,7 +144,7 @@ export default function PestDetectionPage() {
     setDetections([])
     try {
       if (!detector.isLoaded) await detector.load(detectionMode)
-      const found = await detector.detect(imgEl, threshold)
+      const found = await detector.detect(imgEl)
       setDetections(found)
       setExpandedIdx(found.length > 0 ? 0 : null)
     } catch (e) {
@@ -181,7 +179,7 @@ export default function PestDetectionPage() {
               Pest &amp; Disease Detection
             </h1>
             <p className="text-xs text-muted-foreground">
-              YOLOv8 · {detectionMode === 'pest' ? 'Pest detection · simranvolunesia/pest-dataset' : 'Disease detection · Plant Village dataset'}
+              YOLOv8 · {detectionMode === 'pest' ? 'Pest detection' : 'Disease detection'}
             </p>
           </div>
 
@@ -207,7 +205,7 @@ export default function PestDetectionPage() {
       </header>
 
       <div className="p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:items-start">
 
           {/* ── Main column ────────────────────────────────────────────────── */}
           <div className="lg:col-span-2 space-y-5">
@@ -349,24 +347,6 @@ export default function PestDetectionPage() {
                   </div>
                 )}
 
-                {/* ── Confidence threshold slider ──────────────────────── */}
-                <div className="pt-1 space-y-2 border-t border-border mt-2">
-                  <div className="flex items-center justify-between pt-3 text-sm">
-                    <span className="font-medium text-foreground">Confidence Threshold</span>
-                    <span className="text-primary font-bold tabular-nums">
-                      {Math.round(threshold * 100)}%
-                    </span>
-                  </div>
-                  <Slider
-                    min={5} max={90} step={5}
-                    value={[Math.round(threshold * 100)]}
-                    onValueChange={([v]) => setThreshold(v / 100)}
-                    className="w-full"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Lower = more detections (possible false positives) · Higher = stricter
-                  </p>
-                </div>
 
               </CardContent>
             </Card>
@@ -392,9 +372,9 @@ export default function PestDetectionPage() {
                         <CheckCircle2 className="h-6 w-6 text-green-500" />
                       </div>
                       <div>
-                        <p className="font-semibold text-foreground">No objects detected above threshold</p>
+                        <p className="font-semibold text-foreground">No objects detected</p>
                         <p className="text-sm text-muted-foreground mt-0.5">
-                          Try lowering the confidence threshold, or upload a higher-quality image.
+                          Try a clearer image or capture the plant from a closer angle.
                         </p>
                       </div>
                     </CardContent>
@@ -406,25 +386,26 @@ export default function PestDetectionPage() {
                       <h2 className="text-xs font-medium text-muted-foreground">
                         {detections.length} detection{detections.length !== 1 ? "s" : ""} found
                       </h2>
-                      <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">
-                        YOLOv8 · {Math.round(threshold * 100)}% conf
-                      </Badge>
+                      <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">YOLOv8 Results</Badge>
                     </div>
 
                     {/* Detection cards */}
-                    {detections.map((det, idx) => (
-                      <Card
-                        key={idx}
-                        className="overflow-hidden transition-all duration-200"
-                        style={{ borderColor: `${det.color}50` }}
-                      >
+                    {detections.map((det, idx) => {
+                      const confidencePercent = Math.round(det.confidence * 100)
+
+                      return (
+                        <Card
+                          key={idx}
+                          className="overflow-hidden transition-all duration-200"
+                          style={{ borderColor: `${det.color}50` }}
+                        >
                         {/* Clickable header */}
                         <button
                           className="w-full text-left focus:outline-none"
                           onClick={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
                         >
                           <CardHeader className="py-3 px-4">
-                            <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-start justify-between gap-3">
                               <div className="flex items-center gap-3 min-w-0">
                                 {/* Colour swatch icon */}
                                 <div
@@ -445,21 +426,35 @@ export default function PestDetectionPage() {
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-2 flex-shrink-0">
+                              <div className="flex items-center gap-2 flex-shrink-0 sm:gap-3">
                                 {det.severity !== "none" && (
                                   <Badge className={`text-xs ${getSeverityStyle(det.severity)}`}>
                                     {det.severity}
                                   </Badge>
                                 )}
-                                <span
-                                  className="text-sm font-bold tabular-nums"
-                                  style={{ color: det.color }}
+                                <div
+                                  className="min-w-[74px] rounded-lg border px-2 py-1 text-center"
+                                  style={{
+                                    backgroundColor: `${det.color}12`,
+                                    borderColor: `${det.color}55`,
+                                    boxShadow: `0 12px 20px -24px ${det.color}`,
+                                  }}
                                 >
-                                  {Math.round(det.confidence * 100)}%
-                                </span>
-                                {expandedIdx === idx
-                                  ? <ChevronUp   className="h-4 w-4 text-muted-foreground" />
-                                  : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                                  <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                                    Confidence
+                                  </p>
+                                  <p
+                                    className="mt-0.5 text-lg font-black leading-none tabular-nums"
+                                    style={{ color: det.color }}
+                                  >
+                                    {confidencePercent}%
+                                  </p>
+                                </div>
+                                <div className="rounded-full border border-border/70 bg-background/80 p-1">
+                                  {expandedIdx === idx
+                                    ? <ChevronUp   className="h-4 w-4 text-muted-foreground" />
+                                    : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                                </div>
                               </div>
                             </div>
                           </CardHeader>
@@ -468,25 +463,6 @@ export default function PestDetectionPage() {
                         {/* Expanded body */}
                         {expandedIdx === idx && (
                           <CardContent className="pt-0 pb-4 px-4 space-y-4 border-t border-border">
-                            {/* Confidence bar */}
-                            <div className="space-y-1.5 pt-4">
-                              <div className="flex justify-between text-xs text-muted-foreground">
-                                <span>Detection confidence</span>
-                                <span className="font-bold" style={{ color: det.color }}>
-                                  {Math.round(det.confidence * 100)}%
-                                </span>
-                              </div>
-                              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                <div
-                                  className="h-full rounded-full transition-all duration-700"
-                                  style={{
-                                    width: `${Math.round(det.confidence * 100)}%`,
-                                    backgroundColor: det.color,
-                                  }}
-                                />
-                              </div>
-                            </div>
-
                             {/* Bounding box coords */}
                             <div className="grid grid-cols-2 gap-2 text-xs">
                               {[["X1", Math.round(det.bbox[0])], ["Y1", Math.round(det.bbox[1])],
@@ -530,8 +506,8 @@ export default function PestDetectionPage() {
                             </div>
                           </CardContent>
                         )}
-                      </Card>
-                    ))}
+                        </Card>
+                    )})}
                   </div>
                 )}
               </>
@@ -540,30 +516,7 @@ export default function PestDetectionPage() {
           </div>
 
           {/* ── Sidebar ──────────────────────────────────────────────────── */}
-          <div className="space-y-5">
-
-            {/* How it works */}
-            <Card className="bg-primary/5 border-primary/20 shadow shadow-primary/5">
-              <CardContent className="p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Zap className="h-4 w-4 text-primary" />
-                  <p className="text-sm font-semibold text-foreground">How it works</p>
-                </div>
-                <ol className="space-y-2 text-xs text-muted-foreground">
-                  {[
-                    "Image letterbox-resized to 640×640",
-                    "YOLOv8n ONNX runs in WebAssembly (no server!)",
-                    "Non-max suppression removes duplicate boxes",
-                    "Results mapped to class labels & severity",
-                  ].map((s, i) => (
-                    <li key={i} className="flex gap-2">
-                      <span className="text-primary font-bold">{i + 1}.</span>
-                      <span>{s}</span>
-                    </li>
-                  ))}
-                </ol>
-              </CardContent>
-            </Card>
+          <div className="space-y-5 lg:sticky lg:top-24 lg:self-start">
 
             {/* Nearby alerts */}
             <Card className="shadow shadow-primary/5">
@@ -614,22 +567,6 @@ export default function PestDetectionPage() {
                       <Badge className={`text-xs ${getSeverityStyle(s.severity)}`}>{s.result}</Badge>
                     </div>
                   ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Pro tip */}
-            <Card className="border-blue-500/20 bg-blue-500/5 shadow shadow-blue-500/5">
-              <CardContent className="p-4">
-                <div className="flex gap-3">
-                  <Info className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">Pro Tip</p>
-                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                      For best results, photograph affected leaves in natural daylight.
-                      Include both healthy and affected areas in the same frame.
-                    </p>
-                  </div>
                 </div>
               </CardContent>
             </Card>
