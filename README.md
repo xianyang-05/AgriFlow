@@ -33,4 +33,4 @@ AgriFlow is a Next.js frontend with a FastAPI backend and local model artifacts 
 - `DEFAULT_CURRENCY`
 - `CORS_ORIGINS`
 
-Use `.env.local` files for real local secrets. The committed env files are templates only.
+Use the repo-root `.env` for real local secrets. The committed `.env.example` file is the template.

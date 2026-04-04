@@ -300,14 +300,14 @@ export default function DashboardPage() {
     setArSessionId(newSession);
     
     // Phone must open an HTTPS origin for getUserMedia on most mobile browsers.
-    // Set NEXT_PUBLIC_PHONE_BASE_URL=https://YOUR-NGROK-SUBDOMAIN.ngrok-free.app in .env.local
+    // Set NEXT_PUBLIC_PHONE_BASE_URL=https://YOUR-NGROK-SUBDOMAIN.ngrok-free.app in .env
     let host = window.location.origin;
     const tunnel = process.env.NEXT_PUBLIC_PHONE_BASE_URL?.replace(/\/$/, "");
     if (tunnel && (host.includes("localhost") || host.includes("127.0.0.1"))) {
       host = tunnel;
     } else if (host.includes("localhost") || host.includes("127.0.0.1")) {
       alert(
-        "Phone camera needs HTTPS. Please set NEXT_PUBLIC_PHONE_BASE_URL to your active ngrok HTTPS URL in .env.local, then restart the app."
+        "Phone camera needs HTTPS. Please set NEXT_PUBLIC_PHONE_BASE_URL to your active ngrok HTTPS URL in .env, then restart the app."
       );
       return;
     }

@@ -1,7 +1,11 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -23,7 +27,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=list)
 
     model_config = SettingsConfigDict(
-        env_file=(".env", "../.env", "../.env.local", ".env.local"),
+        env_file=(REPO_ROOT / ".env",),
         extra="ignore",
     )
 
