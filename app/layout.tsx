@@ -1,11 +1,7 @@
 import type { Metadata } from 'next'
-import { Inter, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import CursorEffect from '@/components/CursorEffect'
 import './globals.css'
-
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: 'AgriFlow - Intelligent Farming System',
@@ -37,7 +33,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className="font-sans antialiased">
         <CursorEffect />
         {children}
         <Analytics />
