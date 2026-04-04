@@ -13,11 +13,19 @@ const DEFAULT_OLLAMA_BASE_URL = "https://ollama.com"
 const DEFAULT_OLLAMA_TEXT_MODEL = "llama3.2"
 const DEFAULT_OLLAMA_VISION_MODEL = "llava"
 const DEFAULT_TIMEOUT_MS = 10_000
+const MIN_LOCAL_TIMEOUT_MS = 30_000
 const MODEL_FALLBACKS: Record<string, string> = {
   llama3: DEFAULT_OLLAMA_TEXT_MODEL,
+  "llama3:latest": DEFAULT_OLLAMA_TEXT_MODEL,
+  [DEFAULT_OLLAMA_TEXT_MODEL]: "llama3",
+  "llama3.2:latest": "llama3",
   [DEFAULT_OLLAMA_TEXT_MODEL]: "gemma3",
   llava: "gemma3",
+  "llava:latest": "gemma3",
+  gemma3: "llama3.2",
+  "gemma3:latest": "llama3.2",
 }
+const VISION_MODEL_HINTS = ["llava", "bakllava", "minicpm-v", "moondream"]
 
 export class OllamaRequestError extends Error {
   kind: OllamaErrorKind
@@ -35,20 +43,26 @@ export class OllamaRequestError extends Error {
 
 export function getOllamaConfig() {
   const baseUrl = (process.env.OLLAMA_BASE_URL || DEFAULT_OLLAMA_BASE_URL).replace(/\/+$/, "")
+  const isLocalOllama = isLocalBaseUrl(baseUrl)
   const requestTimeoutSeconds = Number(process.env.REQUEST_TIMEOUT_SECONDS || "10")
-  const timeoutMs =
+  const requestedTimeoutMs =
     Number.isFinite(requestTimeoutSeconds) && requestTimeoutSeconds > 0
       ? Math.round(requestTimeoutSeconds * 1000)
       : DEFAULT_TIMEOUT_MS
+  const timeoutMs = isLocalOllama ? Math.max(requestedTimeoutMs, MIN_LOCAL_TIMEOUT_MS) : requestedTimeoutMs
   const apiKey = process.env.OLLAMA_API_KEY?.trim() || ""
+  const configuredTextModel = process.env.OLLAMA_MODEL?.trim()
+  const configuredVisionModel = process.env.OLLAMA_VISION_MODEL?.trim()
+  const textModel = resolveTextModel(configuredTextModel, configuredVisionModel)
+  const visionModel = resolveVisionModel(configuredTextModel, configuredVisionModel)
 
   return {
     apiKey,
     authenticated: Boolean(apiKey),
     baseUrl,
     baseUrlHost: safeUrlHost(baseUrl),
-    model: process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_TEXT_MODEL,
-    visionModel: process.env.OLLAMA_VISION_MODEL || DEFAULT_OLLAMA_VISION_MODEL,
+    model: textModel,
+    visionModel,
     timeoutMs,
   }
 }
@@ -192,6 +206,40 @@ function safeUrlHost(baseUrl: string) {
   } catch {
     return baseUrl
   }
+}
+
+function isLocalBaseUrl(baseUrl: string) {
+  try {
+    const { hostname } = new URL(baseUrl)
+    return hostname === "localhost" || hostname === "127.0.0.1"
+  } catch {
+    return false
+  }
+}
+
+function resolveTextModel(configuredTextModel?: string, configuredVisionModel?: string) {
+  if (!configuredTextModel) {
+    return DEFAULT_OLLAMA_TEXT_MODEL
+  }
+  if (!configuredVisionModel && looksLikeVisionModel(configuredTextModel)) {
+    return DEFAULT_OLLAMA_TEXT_MODEL
+  }
+  return configuredTextModel
+}
+
+function resolveVisionModel(configuredTextModel?: string, configuredVisionModel?: string) {
+  if (configuredVisionModel) {
+    return configuredVisionModel
+  }
+  if (configuredTextModel && looksLikeVisionModel(configuredTextModel)) {
+    return configuredTextModel
+  }
+  return DEFAULT_OLLAMA_VISION_MODEL
+}
+
+function looksLikeVisionModel(model: string) {
+  const normalized = model.trim().toLowerCase()
+  return VISION_MODEL_HINTS.some((hint) => normalized.includes(hint))
 }
 
 function payloadHasImages(payload: Record<string, unknown>) {

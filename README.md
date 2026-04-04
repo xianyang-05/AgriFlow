@@ -10,6 +10,13 @@ AgriFlow is a Next.js frontend with a FastAPI backend and local model artifacts 
 4. Set `NEXT_PUBLIC_API_BASE_URL=/server`.
 5. Deploy and verify `/server/api/v1/health`.
 
+The phone measurement flow uses the current HTTPS site origin automatically on
+Vercel. `NEXT_PUBLIC_PHONE_BASE_URL` is only needed for local phone testing
+when your app is running on plain HTTP and you want to point the QR code at an
+tunnel such as ngrok. Phone-to-dashboard sync uses the backend database as the
+shared handoff between devices, so keep `DATABASE_URL` configured in deployed
+environments if you want the measurement result to appear in the dashboard chat.
+
 The Vercel backend uses a slim Python runtime. Climate scoring still runs from
 the bundled climate model, while price forecasting falls back to the static
 baseline unless you install the optional backend `ml` extra on another host.
@@ -21,6 +28,7 @@ baseline unless you install the optional backend `ml` extra on another host.
 - `OLLAMA_API_KEY`
 - `OLLAMA_MODEL=gemma3`
 - `NEXT_PUBLIC_API_BASE_URL=/server`
+- `DATABASE_URL` for phone measurement sync
 
 ## Optional backend environment variables
 

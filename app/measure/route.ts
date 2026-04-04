@@ -48,7 +48,7 @@ export async function GET() {
       <h1>Measure Plant Height</h1>
       <p class="sub">Stay about <strong>30cm</strong> away from the plant. Tap the <strong>base</strong> on the screen, then tap the <strong>top</strong>.</p>
       <button type="button" class="btn btn-primary" id="btnStart">Start Measurement</button>
-      <p class="note">Chrome or Safari over HTTPS (ngrok).</p>
+      <p class="note">Chrome or Safari over HTTPS. Use ngrok only for local development.</p>
     </div>
   </div>
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { callOllamaChat, getOllamaConfig, OllamaRequestError } from "@/lib/server/ollama"
 
+export const maxDuration = 60
+
 const SYSTEM_PROMPT = `You are AgriFlow Plant Tracker, an expert botanical AI assistant. The user monitors a tomato plant on the Dashboard.
 
 RESPONSE FORMAT — Always structure your reply using these short sections with emoji headers. Keep each section to 1-2 sentences max:

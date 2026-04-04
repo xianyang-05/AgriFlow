@@ -124,6 +124,7 @@ export default function DashboardPage() {
   const [chatInput, setChatInput] = useState("")
   const [isChatLoading, setIsChatLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const chatMessagesRef = useRef(chatMessages)
   const photoInputRef = useRef<HTMLInputElement>(null)
 
   const [phoneSynced, setPhoneSynced] = useState(false)
@@ -140,6 +141,10 @@ export default function DashboardPage() {
       return
     }
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [chatMessages])
+
+  useEffect(() => {
+    chatMessagesRef.current = chatMessages
   }, [chatMessages])
 
   const handleChatSubmit = async (e: React.FormEvent) => {
@@ -269,10 +274,14 @@ export default function DashboardPage() {
           const mappedDay = Math.min(Math.round((measuredHeight / 150) * 60) + 5, 60);
           setGrowthDay(mappedDay);
 
-          setChatMessages((prev) => {
-            void fetchHeightInsight(measuredHeight, prev, mappedDay)
-            return prev
-          });
+          const measurementMessage = {
+            role: "user" as const,
+            content: `I synced a plant height measurement from my phone: ${measuredHeight} cm.`,
+          };
+          const historyWithMeasurement = [...chatMessagesRef.current, measurementMessage];
+          chatMessagesRef.current = historyWithMeasurement;
+          setChatMessages(historyWithMeasurement);
+          void fetchHeightInsight(measuredHeight, historyWithMeasurement, mappedDay);
           
           return; // Stop polling
         }
@@ -294,20 +303,36 @@ export default function DashboardPage() {
     };
   }, [isQrModalOpen, arSessionId]);
 
+  const resolvePhoneMeasurementOrigin = () => {
+    const currentOrigin = window.location.origin.replace(/\/$/, "");
+
+    if (window.location.protocol === "https:") {
+      return currentOrigin;
+    }
+
+    const configuredBaseUrl = process.env.NEXT_PUBLIC_PHONE_BASE_URL?.trim().replace(/\/$/, "");
+    if (!configuredBaseUrl) {
+      return null;
+    }
+
+    try {
+      const url = new URL(configuredBaseUrl);
+      return url.protocol === "https:" ? url.origin.replace(/\/$/, "") : null;
+    } catch {
+      return null;
+    }
+  };
+
   const openArModal = () => {
     // Generate simple ID robust against non-https IPs
     const newSession = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     setArSessionId(newSession);
     
-    // Phone must open an HTTPS origin for getUserMedia on most mobile browsers.
-    // Set NEXT_PUBLIC_PHONE_BASE_URL=https://YOUR-NGROK-SUBDOMAIN.ngrok-free.app in .env
-    let host = window.location.origin;
-    const tunnel = process.env.NEXT_PUBLIC_PHONE_BASE_URL?.replace(/\/$/, "");
-    if (tunnel && (host.includes("localhost") || host.includes("127.0.0.1"))) {
-      host = tunnel;
-    } else if (host.includes("localhost") || host.includes("127.0.0.1")) {
+    // Phone camera access requires the page opened on the phone to be served over HTTPS.
+    const host = resolvePhoneMeasurementOrigin();
+    if (!host) {
       alert(
-        "Phone camera needs HTTPS. Please set NEXT_PUBLIC_PHONE_BASE_URL to your active ngrok HTTPS URL in .env, then restart the app."
+        "Phone camera needs HTTPS. On local dev, set NEXT_PUBLIC_PHONE_BASE_URL to your active ngrok HTTPS URL in .env.local and restart the app. Deployed HTTPS environments work automatically."
       );
       return;
     }
