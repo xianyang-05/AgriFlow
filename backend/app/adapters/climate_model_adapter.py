@@ -17,6 +17,8 @@ class ClimateModelAdapter:
     def __init__(self) -> None:
         self.settings = get_settings()
         self._loaded_model: Any | None = None
+        self._backend_root = Path(__file__).resolve().parents[2]
+        self._repo_root = Path(__file__).resolve().parents[3]
 
     def fetch(self, request: ClimateRequest) -> ClimateOutput:
         if not self.settings.climate_model_path:
@@ -29,9 +31,7 @@ class ClimateModelAdapter:
             raise ClimateError(f"Local climate model failed: {exc}") from exc
 
     def _predict_local(self, request: ClimateRequest) -> dict[str, Any]:
-        model_path = Path(self.settings.climate_model_path or "")
-        if not model_path.is_absolute():
-            model_path = (Path.cwd() / model_path).resolve()
+        model_path = self._resolve_model_path(self.settings.climate_model_path)
         if not model_path.exists():
             raise ClimateError(f"Climate model file not found: {model_path}")
 
@@ -417,9 +417,7 @@ class ClimateModelAdapter:
         model_status = "missing_config"
         resolved_path = ""
         if model_path:
-            resolved = Path(model_path)
-            if not resolved.is_absolute():
-                resolved = (Path.cwd() / resolved).resolve()
+            resolved = self._resolve_model_path(model_path)
             resolved_path = str(resolved)
             model_status = "ready" if resolved.exists() else "missing_file"
 
@@ -428,3 +426,22 @@ class ClimateModelAdapter:
             "model_path_status": model_status,
             "model_path": resolved_path,
         }
+
+    def _resolve_model_path(self, model_path: str | None) -> Path:
+        if not model_path:
+            return Path("")
+
+        raw_path = Path(model_path)
+        if raw_path.is_absolute():
+            return raw_path.resolve()
+
+        candidates = [
+            self._backend_root / raw_path,
+            self._repo_root / raw_path,
+            Path.cwd() / raw_path,
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate.resolve()
+
+        return candidates[0].resolve()

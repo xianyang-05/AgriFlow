@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434"
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.2"
+import { callOllamaChat, OllamaRequestError } from "@/lib/server/ollama"
 
 const SYSTEM_PROMPT = `You are AgriFlow Plant Tracker, an expert botanical AI assistant. The user is on the "Dashboard" page, monitoring their plant's progression (e.g., Tomato). They may provide physical measurements, upload descriptions of the plant, or ask for daily actions.
 Your job is to provide concise, encouraging, and highly specific botanical advice. Provide insights on their crop's current growth stage and any risks they should watch out for.`
+
+type ChatMessage = {
+  role: string
+  content: string
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,36 +20,38 @@ export async function POST(request: NextRequest) {
     // Format history for Ollama
     const messages = [
       { role: "system", content: SYSTEM_PROMPT },
-      ...(chatHistory || []).map((msg: any) => ({
+      ...((chatHistory || []) as ChatMessage[]).map((msg) => ({
         role: msg.role === "ai" ? "assistant" : "user",
         content: msg.content
       })),
       { role: "user", content: message }
     ]
 
-    const ollamaResponse = await fetch(`${OLLAMA_URL}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: OLLAMA_MODEL,
+    const data = await callOllamaChat<{ message?: { content?: string } }>(
+      {
         messages,
         stream: false,
-      }),
-    })
-
-    if (!ollamaResponse.ok) {
-        throw new Error(`Ollama Error: ${ollamaResponse.statusText}`)
-    }
-
-    const data = await ollamaResponse.json()
-    return NextResponse.json({ reply: data.message.content })
+      },
+      {
+        historyCount: Array.isArray(chatHistory) ? chatHistory.length : 0,
+        route: "plant-tracker",
+      }
+    )
+    return NextResponse.json({ reply: data.message?.content || getFallbackReply() })
 
   } catch (error) {
-    console.error("Plant Tracker Assistant Error:", error)
+    if (error instanceof OllamaRequestError) {
+      console.error("[plant-tracker] ollama_request_failed", {
+        errorKind: error.kind,
+        status: error.status,
+      })
+    } else {
+      console.error("Plant Tracker Assistant Error:", error)
+    }
     return NextResponse.json({ reply: getFallbackReply() }, { status: 500 })
   }
 }
 
 function getFallbackReply() {
-  return "I'm the AgriFlow Plant Tracker. My AI connection to Ollama is currently down. Based on standard timelines, ensure you continue watering your tomato plant daily and monitor its height!"
+  return "I'm the AgriFlow Plant Tracker. My AI connection is currently down. Based on standard timelines, ensure you continue watering your tomato plant daily and monitor its height!"
 }

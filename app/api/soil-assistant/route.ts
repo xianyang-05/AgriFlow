@@ -1,62 +1,5 @@
-import fs from "node:fs"
-import path from "node:path"
-
 import { NextRequest, NextResponse } from "next/server"
-
-// =======================================================
-// Soil Assistant API Route (Ollama / Local LLM)
-// =======================================================
-// This endpoint accepts a soil image (base64) and/or a text
-// description and sends it to a local Ollama instance running
-// a multimodal model (e.g., llava, bakllava, or gemma3).
-//
-// HOW TO USE:
-// 1. Install Ollama: https://ollama.com/download
-// 2. Pull a multimodal model:
-//    ollama pull llava        (or bakllava, gemma3, etc.)
-// 3. Start Ollama (it runs on http://localhost:11434 by default)
-// 4. If you want to use an external API instead, set SOIL_API_KEY
-//    and SOIL_API_URL in your .env.local file.
-// =======================================================
-
-const BACKEND_ENV_PATH = path.join(process.cwd(), "backend", ".env")
-
-function readBackendEnv(): Record<string, string> {
-  try {
-    const envText = fs.readFileSync(BACKEND_ENV_PATH, "utf8")
-    const result: Record<string, string> = {}
-
-    for (const rawLine of envText.split(/\r?\n/)) {
-      const line = rawLine.trim()
-      if (!line || line.startsWith("#")) {
-        continue
-      }
-
-      const separatorIndex = line.indexOf("=")
-      if (separatorIndex === -1) {
-        continue
-      }
-
-      const key = line.slice(0, separatorIndex).trim()
-      const value = line.slice(separatorIndex + 1).trim().replace(/^['"]|['"]$/g, "")
-      result[key] = value
-    }
-
-    return result
-  } catch {
-    return {}
-  }
-}
-
-const BACKEND_ENV = readBackendEnv()
-const OLLAMA_URL =
-  BACKEND_ENV.OLLAMA_BASE_URL || process.env.OLLAMA_URL || "http://localhost:11434"
-const OLLAMA_MODEL =
-  BACKEND_ENV.OLLAMA_MODEL || process.env.OLLAMA_MODEL || "llava"
-
-// Optional: external API key (user can add this later)
-const SOIL_API_KEY = process.env.SOIL_API_KEY || ""
-const SOIL_API_URL = process.env.SOIL_API_URL || ""
+import { callOllamaGenerate, getOllamaConfig, OllamaRequestError } from "@/lib/server/ollama"
 
 const SOIL_TYPES = ["sandy", "clay", "loamy", "silt", "peat", "chalky"] as const
 
@@ -99,6 +42,7 @@ function logSoilAssistant(level: "warn" | "error", event: string, details: Recor
 
 export async function POST(request: NextRequest) {
   try {
+    const ollamaConfig = getOllamaConfig()
     const body = await request.json()
     const { image, description, chatHistory } = body
     const trimmedDescription = typeof description === "string" ? description.trim() : ""
@@ -138,66 +82,7 @@ export async function POST(request: NextRequest) {
       userPrompt += "Analyze this soil and identify its type."
     }
 
-    // =====================================================
-    // Option A: Use external API (if SOIL_API_KEY is set)
-    // =====================================================
-    if (SOIL_API_KEY && SOIL_API_URL) {
-      const externalResponse = await fetch(SOIL_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${SOIL_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: process.env.SOIL_MODEL || "gpt-4o-mini",
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            {
-              role: "user",
-              content: image
-                ? [
-                    { type: "text", text: userPrompt },
-                    { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } },
-                  ]
-                : userPrompt,
-            },
-          ],
-          max_tokens: 500,
-        }),
-      })
-
-      if (!externalResponse.ok) {
-        const err = await externalResponse.text()
-        logSoilAssistant("error", "external_api_failed", {
-          status: externalResponse.status,
-          statusText: externalResponse.statusText,
-          details: err,
-          hasImage: Boolean(image),
-          hasDescription: Boolean(description),
-        })
-        return NextResponse.json(
-          { error: "External API failed", details: err },
-          { status: 502 }
-        )
-      }
-
-      const externalData = await externalResponse.json()
-      const content = externalData.choices?.[0]?.message?.content || ""
-
-      return NextResponse.json(
-        parseAIResponse(content, {
-          provider: "external",
-          hasImage: Boolean(image),
-          hasDescription: Boolean(description),
-        })
-      )
-    }
-
-    // =====================================================
-    // Option B: Use local Ollama (default, free)
-    // =====================================================
     const ollamaPayload: Record<string, unknown> = {
-      model: OLLAMA_MODEL,
       prompt: `${SYSTEM_PROMPT}\n\nUser: ${userPrompt}`,
       stream: false,
     }
@@ -207,50 +92,48 @@ export async function POST(request: NextRequest) {
       ollamaPayload.images = [image]
     }
 
-    const ollamaResponse = await fetch(`${OLLAMA_URL}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(ollamaPayload),
-    })
-
-    if (!ollamaResponse.ok) {
-      const errText = await ollamaResponse.text()
-      logSoilAssistant("error", "ollama_request_failed", {
-        status: ollamaResponse.status,
-        statusText: ollamaResponse.statusText,
-        model: OLLAMA_MODEL,
-        url: `${OLLAMA_URL}/api/generate`,
-        details: errText,
+    try {
+      const ollamaData = await callOllamaGenerate<{ response?: string }>(ollamaPayload, {
+        hasDescription: Boolean(trimmedDescription),
         hasImage: Boolean(image),
-        hasDescription: Boolean(description),
+        route: "soil-assistant",
       })
+      const responseText = ollamaData.response || ""
+
+      return NextResponse.json(
+        parseAIResponse(responseText, {
+          hasDescription: Boolean(trimmedDescription),
+          hasImage: Boolean(image),
+          model: ollamaConfig.model,
+          provider: "ollama",
+        })
+      )
+    } catch (error) {
       const fallback = getFallbackResponse(trimmedDescription, {
         reason: "ollama_request_failed",
         hasImage: Boolean(image),
         hasDescription: Boolean(trimmedDescription),
       })
+      if (error instanceof OllamaRequestError) {
+        logSoilAssistant("error", "ollama_request_failed", {
+          authenticated: ollamaConfig.authenticated,
+          baseUrlHost: ollamaConfig.baseUrlHost,
+          errorKind: error.kind,
+          hasDescription: Boolean(trimmedDescription),
+          hasImage: Boolean(image),
+          model: ollamaConfig.model,
+          status: error.status,
+        })
+      }
       return NextResponse.json(
         {
-          error: "Could not connect to Ollama. Make sure Ollama is running locally.",
-          details: errText,
+          error: getOllamaErrorMessage(error),
+          details: error instanceof OllamaRequestError ? error.details : undefined,
           ...fallback,
           degraded: true,
         }
       )
     }
-
-    const ollamaData = await ollamaResponse.json()
-    const responseText = ollamaData.response || ""
-
-    return NextResponse.json(
-      parseAIResponse(responseText, {
-        provider: "ollama",
-        model: OLLAMA_MODEL,
-        hasImage: Boolean(image),
-        hasDescription: Boolean(trimmedDescription),
-      })
-    )
-
   } catch (error) {
     logSoilAssistant("error", "route_exception", {
       error: error instanceof Error ? error.message : String(error),
@@ -366,4 +249,12 @@ function isVagueDescription(description: string): boolean {
   }
 
   return false
+}
+
+function getOllamaErrorMessage(error: unknown) {
+  if (error instanceof OllamaRequestError && error.kind === "unauthorized") {
+    return "Could not authenticate with the configured Ollama endpoint."
+  }
+
+  return "Could not connect to the configured Ollama endpoint."
 }

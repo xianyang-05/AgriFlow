@@ -1,5 +1,7 @@
 import json
+from time import perf_counter
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -15,10 +17,13 @@ class LLMService:
     def __init__(self) -> None:
         self.settings = get_settings()
         self._chat_endpoint_available: bool | None = None
+        self._ollama_base_url = self.settings.ollama_base_url.rstrip("/")
+        self._ollama_authenticated = bool(self.settings.ollama_api_key.strip())
         self.logger = get_logger().bind(
             service="ollama",
-            ollama_base_url=self.settings.ollama_base_url,
+            ollama_base_url_host=self._base_url_host(),
             ollama_model=self.settings.ollama_model,
+            ollama_authenticated=self._ollama_authenticated,
         )
 
     def _generate(self, system_prompt: str, user_prompt: str, *, json_mode: bool = False) -> str:
@@ -32,8 +37,8 @@ class LLMService:
             payload["format"] = "json"
 
         try:
-            with httpx.Client(timeout=self.settings.request_timeout_seconds) as client:
-                response = client.post(f"{self.settings.ollama_base_url}/api/generate", json=payload)
+            with httpx.Client(timeout=self.settings.request_timeout_seconds, headers=self._request_headers()) as client:
+                response = client.post(f"{self._ollama_base_url}/api/generate", json=payload)
                 response.raise_for_status()
         except httpx.HTTPError as exc:
             self._log_http_error(
@@ -78,8 +83,8 @@ class LLMService:
             payload["format"] = "json"
 
         try:
-            with httpx.Client(timeout=self.settings.request_timeout_seconds) as client:
-                response = client.post(f"{self.settings.ollama_base_url}/api/chat", json=payload)
+            with httpx.Client(timeout=self.settings.request_timeout_seconds, headers=self._request_headers()) as client:
+                response = client.post(f"{self._ollama_base_url}/api/chat", json=payload)
                 if response.status_code == 404:
                     self._chat_endpoint_available = False
                     self.logger.warning(
@@ -192,20 +197,87 @@ class LLMService:
         )
         return self._chat(system_prompt, explanation_input.model_dump_json())
 
-    def check_health(self) -> dict[str, str]:
+    def check_health(self) -> dict[str, Any]:
+        started_at = perf_counter()
         try:
-            with httpx.Client(timeout=3.0) as client:
-                response = client.get(f"{self.settings.ollama_base_url}/api/tags")
+            with httpx.Client(timeout=3.0, headers=self._request_headers()) as client:
+                response = client.get(f"{self._ollama_base_url}/api/tags")
                 response.raise_for_status()
-            return {"status": "healthy"}
+            latency_ms = round((perf_counter() - started_at) * 1000, 2)
+            self.logger.info(
+                "ollama.healthcheck.completed",
+                endpoint="/api/tags",
+                status="healthy",
+                latency_ms=latency_ms,
+            )
+            return self._health_payload("healthy", latency_ms)
         except httpx.HTTPError as exc:
+            latency_ms = round((perf_counter() - started_at) * 1000, 2)
+            status = self._classify_http_error(exc)
             self._log_http_error(
                 "ollama.healthcheck.failed",
                 exc,
                 endpoint="/api/tags",
                 level="warning",
+                latency_ms=latency_ms,
             )
-            return {"status": "unreachable"}
+            return self._health_payload(
+                status,
+                latency_ms,
+                status_code=getattr(getattr(exc, "response", None), "status_code", None),
+            )
+
+    def _request_headers(self) -> dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if self._ollama_authenticated:
+            headers["Authorization"] = f"Bearer {self.settings.ollama_api_key}"
+        return headers
+
+    def _base_url_host(self) -> str:
+        parsed = urlparse(self._ollama_base_url)
+        return parsed.netloc or self._ollama_base_url
+
+    def _classify_http_error(self, exc: httpx.HTTPError) -> str:
+        if isinstance(exc, httpx.TimeoutException):
+            return "timeout"
+        if isinstance(exc, (httpx.ConnectError, httpx.NetworkError)):
+            return "unreachable"
+
+        response = getattr(exc, "response", None)
+        if response is None:
+            return "unreachable"
+        if response.status_code in {401, 403}:
+            return "unauthorized"
+        if response.status_code >= 500:
+            return "provider_error"
+        return "request_error"
+
+    def _health_payload(
+        self,
+        status: str,
+        latency_ms: float,
+        *,
+        status_code: int | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "status": status,
+            "base_url_host": self._base_url_host(),
+            "model": self.settings.ollama_model,
+            "authenticated": self._ollama_authenticated,
+            "latency_ms": latency_ms,
+            "status_code": status_code,
+        }
+
+    def _response_preview(self, response: httpx.Response | None) -> str | None:
+        if response is None:
+            return None
+        try:
+            preview = response.text.strip()
+        except Exception:
+            return None
+        if not preview:
+            return None
+        return preview[:300]
 
     def _log_http_error(
         self,
@@ -214,6 +286,7 @@ class LLMService:
         *,
         endpoint: str,
         level: str = "error",
+        latency_ms: float | None = None,
     ) -> None:
         response = getattr(exc, "response", None)
         request = getattr(exc, "request", None)
@@ -223,5 +296,8 @@ class LLMService:
             endpoint=endpoint,
             status_code=response.status_code if response is not None else None,
             request_method=request.method if request is not None else None,
+            error_kind=self._classify_http_error(exc),
             error=str(exc),
+            latency_ms=latency_ms,
+            response_preview=self._response_preview(response),
         )

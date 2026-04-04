@@ -10,6 +10,7 @@ from app.services.llm_service import LLMService
 class FakeLogger:
     def __init__(self) -> None:
         self.errors: list[tuple[str, dict]] = []
+        self.infos: list[tuple[str, dict]] = []
         self.warnings: list[tuple[str, dict]] = []
 
     def bind(self, **kwargs):
@@ -17,6 +18,9 @@ class FakeLogger:
 
     def error(self, event: str, **kwargs) -> None:
         self.errors.append((event, kwargs))
+
+    def info(self, event: str, **kwargs) -> None:
+        self.infos.append((event, kwargs))
 
     def warning(self, event: str, **kwargs) -> None:
         self.warnings.append((event, kwargs))
@@ -28,6 +32,7 @@ def test_llm_service_logs_error_when_ollama_is_unreachable(monkeypatch):
         "app.services.llm_service.get_settings",
         lambda: SimpleNamespace(
             ollama_base_url="http://localhost:11434",
+            ollama_api_key="",
             ollama_model="llama3.2:3b",
             request_timeout_seconds=1,
         ),
@@ -35,8 +40,9 @@ def test_llm_service_logs_error_when_ollama_is_unreachable(monkeypatch):
     monkeypatch.setattr("app.services.llm_service.get_logger", lambda: logger)
 
     class FailingClient:
-        def __init__(self, timeout):
+        def __init__(self, timeout, headers):
             self.timeout = timeout
+            self.headers = headers
 
         def __enter__(self):
             return self
@@ -68,6 +74,7 @@ def test_llm_service_logs_warning_when_chat_endpoint_is_missing(monkeypatch):
         "app.services.llm_service.get_settings",
         lambda: SimpleNamespace(
             ollama_base_url="http://localhost:11434",
+            ollama_api_key="",
             ollama_model="llama3.2:3b",
             request_timeout_seconds=1,
         ),
@@ -75,8 +82,9 @@ def test_llm_service_logs_warning_when_chat_endpoint_is_missing(monkeypatch):
     monkeypatch.setattr("app.services.llm_service.get_logger", lambda: logger)
 
     class FallbackClient:
-        def __init__(self, timeout):
+        def __init__(self, timeout, headers):
             self.timeout = timeout
+            self.headers = headers
 
         def __enter__(self):
             return self
@@ -102,3 +110,42 @@ def test_llm_service_logs_warning_when_chat_endpoint_is_missing(monkeypatch):
     assert payload["endpoint"] == "/api/chat"
     assert payload["fallback_endpoint"] == "/api/generate"
     assert payload["status_code"] == 404
+
+
+def test_llm_health_reports_auth_metadata(monkeypatch):
+    logger = FakeLogger()
+    monkeypatch.setattr(
+        "app.services.llm_service.get_settings",
+        lambda: SimpleNamespace(
+            ollama_base_url="https://ollama.com",
+            ollama_api_key="secret-key",
+            ollama_model="llava",
+            request_timeout_seconds=1,
+        ),
+    )
+    monkeypatch.setattr("app.services.llm_service.get_logger", lambda: logger)
+
+    class HealthyClient:
+        def __init__(self, timeout, headers):
+            self.timeout = timeout
+            self.headers = headers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url):
+            request = httpx.Request("GET", url, headers=self.headers)
+            return httpx.Response(200, request=request, json={"models": []})
+
+    monkeypatch.setattr("app.services.llm_service.httpx.Client", HealthyClient)
+
+    payload = LLMService().check_health()
+
+    assert payload["status"] == "healthy"
+    assert payload["base_url_host"] == "ollama.com"
+    assert payload["authenticated"] is True
+    assert payload["model"] == "llava"
+    assert logger.infos

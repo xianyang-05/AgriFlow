@@ -10,8 +10,9 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False, validation_alias=AliasChoices("APP_DEBUG", "DEBUG"))
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/agriflow"
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "llama3.2:3b"
+    ollama_base_url: str = "https://ollama.com"
+    ollama_api_key: str = ""
+    ollama_model: str = "llava"
     nominatim_base_url: str = "https://nominatim.openstreetmap.org"
     open_elevation_base_url: str = "https://api.open-elevation.com/api/v1"
     climate_model_path: str | None = "climate_model_v2.joblib"
@@ -22,7 +23,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=list)
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "../.env", "../.env.local", ".env.local"),
         extra="ignore",
     )
 

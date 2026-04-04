@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "experimentalServices": {
+    "web": {
+      "entrypoint": ".",
+      "routePrefix": "/"
+    },
+    "api": {
+      "entrypoint": "backend/index.py",
+      "routePrefix": "/server",
+      "maxDuration": 60,
+      "includeFiles": [
+        "backend/climate_model_v2.joblib",
+        "models/saved_models/**",
+        "data/processed/model_ready_daily_features.csv"
+      ]
+    }
+  }
+}
