@@ -9,8 +9,10 @@ import { Progress } from "@/components/ui/progress"
 import { 
   Cloud, Sun, CloudRain, Droplets, ThermometerSun, Wind, 
   AlertTriangle, CheckCircle2, ArrowRight, Waves, Flame,
-  CloudSun, Snowflake, Loader2, ShieldAlert, ChevronRight
+  CloudSun, Snowflake, Loader2, ShieldAlert, ChevronRight,
+  VolumeX, Volume2, Ruler
 } from "lucide-react"
+import { useRef } from "react"
 import dynamic from "next/dynamic"
 
 const InsurancePdfButton = dynamic(() => import("./InsurancePdfButton"), {
@@ -36,14 +38,30 @@ import {
   Area,
 } from "recharts"
 
+// Reusable audio player that handles volume and autoplay securely
+const WeatherAudio = ({ src, isSoundEnabled }: { src: string, isSoundEnabled: boolean }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = 1.0; 
+      if (isSoundEnabled) {
+        audioRef.current.play().catch(e => console.log("Audio playback blocked.", e));
+      } else {
+        audioRef.current.pause();
+      }
+    }
+  }, [src, isSoundEnabled]);
+  return <audio ref={audioRef} src={src} autoPlay={isSoundEnabled} loop muted={!isSoundEnabled} />;
+}
+
 const forecastData = [
-  { day: "Mon", high: 32, low: 24, rain: 0, humidity: 55, icon: "sunny" },
-  { day: "Tue", high: 34, low: 25, rain: 0, humidity: 50, icon: "sunny" },
-  { day: "Wed", high: 30, low: 23, rain: 5, humidity: 65, icon: "cloudy" },
-  { day: "Thu", high: 28, low: 22, rain: 15, humidity: 75, icon: "rainy" },
-  { day: "Fri", high: 31, low: 24, rain: 2, humidity: 60, icon: "partly-cloudy" },
-  { day: "Sat", high: 33, low: 25, rain: 0, humidity: 52, icon: "sunny" },
-  { day: "Sun", high: 32, low: 24, rain: 0, humidity: 55, icon: "sunny" },
+  { day: "Mon", high: 32, low: 24, rain: 0, humidity: 48, icon: "sunny" },
+  { day: "Tue", high: 34, low: 25, rain: 0, humidity: 42, icon: "sunny" },
+  { day: "Wed", high: 30, low: 23, rain: 5, humidity: 68, icon: "cloudy" },
+  { day: "Thu", high: 28, low: 22, rain: 15, humidity: 88, icon: "rainy" },
+  { day: "Fri", high: 31, low: 24, rain: 2, humidity: 62, icon: "partly-cloudy" },
+  { day: "Sat", high: 33, low: 25, rain: 0, humidity: 45, icon: "sunny" },
+  { day: "Sun", high: 32, low: 24, rain: 0, humidity: 51, icon: "sunny" },
 ]
 
 const temperatureHistory = [
@@ -190,6 +208,9 @@ export default function ClimatePage() {
   const [seasonalData, setSeasonalData] = useState<{ month: string; rainfall: number }[]>(fallbackSeasonalData)
   const [floodRisk, setFloodRisk] = useState<"low" | "medium" | "high">("medium")
   const [seasonalError, setSeasonalError] = useState<string | null>(null)
+  const [isSoundEnabled, setIsSoundEnabled] = useState(false)
+  const weatherIcon = today.icon
+  const soundSrc = weatherIcon === "rainy" ? "https://upload.wikimedia.org/wikipedia/commons/4/4e/Rain_Sound_Effect.ogg" : weatherIcon === "cloudy" ? "https://upload.wikimedia.org/wikipedia/commons/2/25/Wind_Sound_Effect.ogg" : "https://upload.wikimedia.org/wikipedia/commons/1/1b/Birdsong_-_nature_sounds_-_238.ogg"
 
   useEffect(() => {
     const applySeasonalRisk = (data: { month: string; rainfall: number }[]) => {
@@ -267,10 +288,20 @@ export default function ClimatePage() {
               Weather forecasts and risk assessments
             </p>
           </div>
+          <div className="ml-auto">
+            <button 
+              onClick={() => setIsSoundEnabled(!isSoundEnabled)}
+              className="bg-muted hover:bg-muted/80 p-2.5 rounded-full transition-all border border-border"
+              title={isSoundEnabled ? "Disable sounds" : "Enable sounds"}
+            >
+              {isSoundEnabled ? <Volume2 className="h-5 w-5 text-primary" /> : <VolumeX className="h-5 w-5 text-muted-foreground" />}
+            </button>
+          </div>
         </div>
       </header>
 
       <div className="p-6 space-y-6">
+        <WeatherAudio src={soundSrc} isSoundEnabled={isSoundEnabled} />
         {/* Current Weather Banner */}
         <Card className="shadow-lg shadow-primary/5 bg-gradient-to-br from-primary/10 via-background to-background border-primary/20">
           <CardContent className="p-6">
@@ -285,13 +316,20 @@ export default function ClimatePage() {
                   <p className="text-muted-foreground mt-1">Sunny, feels like {today.high + 2}°C</p>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-6">
+              <div className="grid grid-cols-4 gap-6">
                 <div className="text-center">
                   <div className="h-10 w-10 rounded-xl bg-info/10 flex items-center justify-center mx-auto mb-2">
                     <Droplets className="h-5 w-5 text-info" />
                   </div>
                   <p className="text-xs text-muted-foreground">Humidity</p>
                   <p className="text-lg font-semibold text-foreground">{today.humidity}%</p>
+                </div>
+                <div className="text-center">
+                  <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center mx-auto mb-2">
+                    <Ruler className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Height</p>
+                  <p className="text-lg font-semibold text-foreground">85 cm</p>
                 </div>
                 <div className="text-center">
                   <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center mx-auto mb-2">
@@ -556,7 +594,7 @@ export default function ClimatePage() {
               </CardContent>
             </Card>
 
-            <Card className="relative overflow-hidden border border-rose-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.98),_rgba(254,242,242,0.96)_38%,_rgba(255,241,242,0.94)_70%,_rgba(255,247,237,0.92)_100%)] py-5 shadow-[0_24px_70px_rgba(239,68,68,0.10)]">
+            <Card className="relative overflow-hidden border border-rose-200 bg-white py-5 shadow-[0_24px_70px_rgba(239,68,68,0.10)]">
               <div className="pointer-events-none absolute -top-24 right-[-6rem] h-72 w-72 rounded-full bg-rose-200/30 blur-3xl" />
               <div className="pointer-events-none absolute bottom-[-7rem] left-[-4rem] h-64 w-64 rounded-full bg-orange-200/20 blur-3xl" />
               <CardHeader className="relative space-y-4 pb-2">

@@ -75,6 +75,8 @@ interface StrategyRecommendationCard {
   cropName: string
   topCrop: RankedCrop
   icon: CropIcon
+  iconColor: string
+  iconBg: string
   score: number
   price: string
   growthCycle: string
@@ -113,20 +115,20 @@ function getMetricTone(score: number): "strong" | "medium" | "weak" {
   return "weak"
 }
 
-function getCropIcon(cropId: string, cropName: string): CropIcon {
+function getCropInfo(cropId: string, cropName: string): { icon: CropIcon, color: string, bg: string } {
   const key = `${cropId} ${cropName}`.toLowerCase()
 
-  if (key.includes("maize") || key.includes("corn")) {
-    return Wheat
+  if (key.includes("maize") || key.includes("corn") || key.includes("wheat") || key.includes("rice")) {
+    return { icon: Wheat, color: "text-amber-600", bg: "bg-amber-100" }
   }
-  if (key.includes("chili") || key.includes("okra") || key.includes("bean")) {
-    return Carrot
+  if (key.includes("chili") || key.includes("okra") || key.includes("bean") || key.includes("carrot")) {
+    return { icon: Carrot, color: "text-orange-600", bg: "bg-orange-100" }
   }
-  if (key.includes("eggplant") || key.includes("cucumber") || key.includes("tomato")) {
-    return Apple
+  if (key.includes("eggplant") || key.includes("cucumber") || key.includes("tomato") || key.includes("apple")) {
+    return { icon: Apple, color: "text-red-600", bg: "bg-red-100" }
   }
 
-  return Leaf
+  return { icon: Leaf, color: "text-emerald-600", bg: "bg-emerald-100" }
 }
 
 function getRewardScore(crop: RankedCrop) {
@@ -473,6 +475,7 @@ function buildStrategyCards(recommendation: RecommendationResponse | null): Stra
 
   return plans.map((plan) => {
     const strategy = plan.strategy
+    const cropInfo = getCropInfo(plan.topCrop.crop_id, plan.topCrop.crop_name)
 
     return {
       strategy,
@@ -480,7 +483,9 @@ function buildStrategyCards(recommendation: RecommendationResponse | null): Stra
       cropId: plan.topCrop.crop_id,
       cropName: plan.topCrop.crop_name,
       topCrop: plan.topCrop,
-      icon: getCropIcon(plan.topCrop.crop_id, plan.topCrop.crop_name),
+      icon: cropInfo.icon,
+      iconColor: cropInfo.color,
+      iconBg: cropInfo.bg,
       score: strategy === "aggressive" ? plan.topCrop.aggressive_score : plan.topCrop.conservative_score,
       price: formatCurrency(plan.topCrop.price_result.predicted_price),
       growthCycle: `${plan.topCrop.growth_days} days`,
@@ -825,7 +830,7 @@ function PlanningPageContent() {
                   <CardContent>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {strategyRecommendations.map((card) => {
-                        const Icon = card.icon
+                        const CropIconComp = card.icon
                         const isSelected = selectedRecommendation?.strategy === card.strategy
 
                         return (
@@ -837,12 +842,12 @@ function PlanningPageContent() {
                                 ? "border-primary bg-primary/5 shadow-md"
                                 : "border-border hover:border-primary/50 hover:bg-muted/50"
                             }`}
-                            >
-                              <div className="flex items-start justify-between mb-3">
-                              <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${
-                                isSelected ? "bg-primary text-primary-foreground" : "bg-muted"
+                          >
+                            <div className="flex items-start justify-between mb-3">
+                              <div className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-colors shadow-sm ${
+                                isSelected ? card.iconBg : "bg-muted"
                               }`}>
-                                <Icon className="h-5 w-5" />
+                                <CropIconComp className={`h-6 w-6 ${isSelected ? card.iconColor : "text-muted-foreground"}`} />
                               </div>
                             </div>
                             <div>
@@ -878,8 +883,8 @@ function PlanningPageContent() {
                                 {card.rationale}
                               </p>
                               <div className="mt-4 space-y-3">
-                                {card.explanationMetrics.map((item, index) => {
-                                  const Icon = getMetricIcon(item.metric)
+                                {card.explanationMetrics.map((item) => {
+                                  const MetricIcon = getMetricIcon(item.metric)
 
                                   return (
                                     <div
@@ -889,11 +894,11 @@ function PlanningPageContent() {
                                       <div className="flex items-start justify-between gap-3">
                                         <div className="flex items-center gap-3">
                                           <div className="rounded-xl bg-primary/10 p-2">
-                                            <Icon className="h-4 w-4 text-primary" />
+                                            <MetricIcon className="h-4 w-4 text-primary" />
                                           </div>
                                           <div>
                                             <p className="text-sm font-semibold text-foreground">
-                                              {index + 1}. {item.label}
+                                              {item.label}
                                             </p>
                                             <p className="text-xs text-muted-foreground">
                                               Score {(item.score * 100).toFixed(0)} / 100

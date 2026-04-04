@@ -109,13 +109,13 @@ export default function DashboardLayout({
 
         {/* Bottom Section */}
         <div className="p-3 border-t border-white/10 flex items-center justify-between">
-          <button className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+          <button suppressHydrationWarning className="p-2 rounded-lg hover:bg-white/10 transition-colors">
             <LogOut className="h-4 w-4 text-white/60" />
           </button>
-          <button className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+          <button suppressHydrationWarning className="p-2 rounded-lg hover:bg-white/10 transition-colors">
             <HelpCircle className="h-4 w-4 text-white/60" />
           </button>
-          <button className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+          <button suppressHydrationWarning className="p-2 rounded-lg hover:bg-white/10 transition-colors">
             <Settings className="h-4 w-4 text-white/60" />
           </button>
         </div>
