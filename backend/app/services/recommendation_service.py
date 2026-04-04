@@ -1,3 +1,4 @@
+from app.config import get_settings
 from app.exceptions import AltitudeError, ClimateError, GeocodingError, NormalizationError
 from app.schemas.climate import ClimateOutput, ForecastBlock
 from app.logging_config import update_request_logging
@@ -36,6 +37,7 @@ class RecommendationService:
         run_repository: RunRepository | None = None,
         plan_history_service: PlanHistoryService | None = None,
     ) -> None:
+        self.settings = get_settings()
         self.normalization_service = normalization_service or NormalizationService()
         self.geocoding_service = geocoding_service or GeocodingService()
         self.altitude_service = altitude_service or AltitudeService()
@@ -261,6 +263,14 @@ class RecommendationService:
         return self._build_response(run_id, pipeline)
 
     def _load_enabled_crops(self, db) -> list[CropRecord]:
+        if self.settings.persistence_mode == "local" or db is None:
+            crops = [crop for crop in SEED_CROPS if crop.enabled]
+            update_request_logging(
+                available_crop_ids=sorted(crop.id for crop in crops),
+                missing_seed_crop_ids=[],
+            )
+            return crops
+
         crops = [
             CropRecord.model_validate(crop)
             for crop in self.crop_repository.list_crops(db, enabled=True)

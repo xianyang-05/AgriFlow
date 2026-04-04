@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import PaddyFieldLoadingScreen from "@/components/PaddyFieldLoadingScreen"
 import { Button } from "@/components/ui/button"
@@ -43,6 +43,15 @@ import {
   createPreviewRecommendation,
   getRecommendationErrorMessage,
 } from "@/lib/recommendations"
+import {
+  createWorkspaceFromRecommendation,
+  getDefaultSoilAssistantChat,
+  readWorkspace,
+  type OnboardingFormData,
+  type SoilAssistantMessage,
+  updateFarmDraft,
+  updateSoilAssistantChat,
+} from "@/lib/local-workspace"
 
 const SUPPORTED_AREA_UNIT_REGEX =
   /\b(m2|sqm|square meter|square meters|acre|acres|ekar|rai|hectare|hectares|football field|football fields)\b/i
@@ -144,7 +153,7 @@ const soilTypesInfo = [
 export default function OnboardingPage() {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(1)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<OnboardingFormData>({
     location: "",
     coordinates: null as { lat: number; lng: number } | null,
     farmSize: "",
@@ -158,14 +167,13 @@ export default function OnboardingPage() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isSearchingMap, setIsSearchingMap] = useState(false)
   const [searchedLocation, setSearchedLocation] = useState<{lat: number; lng: number} | null>(null)
+  const [hasHydratedLocalDraft, setHasHydratedLocalDraft] = useState(false)
 
   // Chatbot State
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [chatInput, setChatInput] = useState("")
   const [isChatLoading, setIsChatLoading] = useState(false)
-  const [chatMessages, setChatMessages] = useState<{role: "user" | "bot", content: string, type: "text" | "image", imageUrl?: string}[]>([
-    { role: "bot", content: "Hi! I'm your Agritwin soil assistant. Describe your soil's texture, color, or behavior, or upload a photo to get help identifying it.", type: "text" }
-  ])
+  const [chatMessages, setChatMessages] = useState<SoilAssistantMessage[]>(getDefaultSoilAssistantChat())
   const [isSoilAssistantExpanded, setIsSoilAssistantExpanded] = useState(false)
 
   // Helper to highlight soil type names in bot messages
@@ -210,6 +218,60 @@ export default function OnboardingPage() {
     return `${prefix}I identified this as **${result.soilType}** (confidence: ${result.confidence}). ${result.explanation}`
   }
 
+  const getComputedAreaTextForDraft = (draft: OnboardingFormData) => {
+    if (!draft.requiresDimensions) return null
+
+    const length = extractDimension(draft.farmLength)
+    const width = extractDimension(draft.farmWidth)
+    if (length <= 0 || width <= 0) return null
+
+    return formatAreaInSquareMeters(length * width)
+  }
+
+  const buildRecommendationPayload = (draft: OnboardingFormData) => {
+    const areaText = getComputedAreaTextForDraft(draft) || draft.farmSize.trim() || null
+
+    return {
+      area_text: areaText,
+      budget_text: draft.budget.trim() || null,
+      location_text: draft.coordinates
+        ? `${draft.coordinates.lat}, ${draft.coordinates.lng}`
+        : draft.location.trim() || null,
+      notes: null,
+      soil_type_text: draft.soilType || null,
+    }
+  }
+
+  useEffect(() => {
+    const workspace = readWorkspace()
+    if (workspace?.farmDraft?.formData) {
+      setFormData(workspace.farmDraft.formData)
+    }
+    if (workspace?.soilAssistantChat?.length) {
+      setChatMessages(workspace.soilAssistantChat)
+    }
+    setHasHydratedLocalDraft(true)
+  }, [])
+
+  useEffect(() => {
+    if (!hasHydratedLocalDraft) {
+      return
+    }
+
+    updateFarmDraft({
+      formData,
+      recommendationPayload: buildRecommendationPayload(formData),
+    })
+  }, [formData, hasHydratedLocalDraft])
+
+  useEffect(() => {
+    if (!hasHydratedLocalDraft) {
+      return
+    }
+
+    updateSoilAssistantChat(chatMessages)
+  }, [chatMessages, hasHydratedLocalDraft])
+
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!chatInput.trim()) return
@@ -250,8 +312,6 @@ export default function OnboardingPage() {
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const imageUrl = URL.createObjectURL(file)
-    setChatMessages(prev => [...prev, { role: "user", content: file.name, type: "image", imageUrl }])
     setIsChatLoading(true)
 
     try {
@@ -260,6 +320,8 @@ export default function OnboardingPage() {
       const base64 = btoa(
         new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
       )
+      const imageUrl = `data:${file.type};base64,${base64}`
+      setChatMessages(prev => [...prev, { role: "user", content: file.name, type: "image", imageUrl }])
       const res = await fetch("/api/soil-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -293,37 +355,19 @@ export default function OnboardingPage() {
     setIsSubmitting(true)
     setSubmitError(null)
 
-    const computedAreaText = getComputedAreaText()
-    const areaText = computedAreaText || formData.farmSize.trim() || null
+    const payload = buildRecommendationPayload(formData)
 
     try {
-      const recommendation = await createPreviewRecommendation({
-        area_text: areaText,
-        budget_text: formData.budget.trim() || null,
-        location_text: formData.coordinates
-          ? `${formData.coordinates.lat}, ${formData.coordinates.lng}`
-          : formData.location.trim() || null,
-        notes: null,
-        soil_type_text: formData.soilType || null,
+      const recommendation = await createPreviewRecommendation(payload)
+      createWorkspaceFromRecommendation({
+        farmDraft: {
+          formData,
+          recommendationPayload: payload,
+        },
+        soilAssistantChat: chatMessages,
+        recommendation,
       })
-
-      const params = new URLSearchParams()
-      if (areaText) {
-        params.set("area_text", areaText)
-      }
-      if (formData.budget.trim()) {
-        params.set("budget_text", formData.budget.trim())
-      }
-      const locationText = formData.coordinates
-        ? `${formData.coordinates.lat}, ${formData.coordinates.lng}`
-        : formData.location.trim()
-      if (locationText) {
-        params.set("location_text", locationText)
-      }
-      if (formData.soilType) {
-        params.set("soil_type_text", formData.soilType)
-      }
-      router.push(`/planning?${params.toString()}`)
+      router.push("/planning")
     } catch (error) {
       setSubmitError(getRecommendationErrorMessage(error))
     } finally {
@@ -350,7 +394,7 @@ export default function OnboardingPage() {
   }
 
   const canProceed = isStepComplete(currentStep)
-  const computedAreaText = getComputedAreaText()
+  const computedAreaText = getComputedAreaTextForDraft(formData)
 
   if (isSubmitting) {
     return (
@@ -744,7 +788,7 @@ export default function OnboardingPage() {
                         )}
                       </Button>
                       <p className="text-xs text-muted-foreground mr-1">
-                        Your data is secure.
+                        Your plan stays on this device.
                       </p>
                     </div>
                   )}

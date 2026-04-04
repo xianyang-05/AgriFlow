@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 from sqlalchemy import text
 
+from app.config import get_settings
 from app.adapters.climate_model_adapter import ClimateModelAdapter
 from app.database import SessionLocal
 from app.services.altitude_service import AltitudeService
@@ -8,16 +9,20 @@ from app.services.geocoding_service import GeocodingService
 from app.services.llm_service import LLMService
 
 router = APIRouter(tags=["health"])
+settings = get_settings()
 
 
 @router.get("/health")
 async def get_health() -> dict[str, object]:
-    database_status = "healthy"
-    try:
-        with SessionLocal() as db:
-            db.execute(text("SELECT 1"))
-    except Exception:
-        database_status = "unhealthy"
+    if settings.persistence_mode == "local":
+        database_status = "disabled"
+    else:
+        database_status = "healthy"
+        try:
+            with SessionLocal() as db:
+                db.execute(text("SELECT 1"))
+        except Exception:
+            database_status = "unhealthy"
 
     return {
         "api": "healthy",

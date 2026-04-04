@@ -14,6 +14,7 @@ class ChatRequest(BaseModel):
 class PreviewChatRequest(BaseModel):
     message: str
     current_recommendation: RecommendationResponse
+    has_previous_version: bool = False
 
 
 class ChatUpdatePayload(BaseModel):
@@ -52,3 +53,4 @@ class ChatResponse(ResponseEnvelope):
     updated_recommendation: RecommendationResponse | None = None
     assistant_message: str
     has_previous_version: bool = False
+    should_revert_locally: bool = False

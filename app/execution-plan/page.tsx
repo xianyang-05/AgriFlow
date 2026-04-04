@@ -19,6 +19,7 @@ import {
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { readWorkspace } from "@/lib/local-workspace"
 
 // Types
 interface Phase {
@@ -132,7 +133,7 @@ const mockPhases: Phase[] = [
 function ExecutionPlanPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const crop = searchParams.get("crop") || "Wheat"
+  const [crop, setCrop] = useState("Wheat")
 
   const [viewMode, setViewMode] = useState<"timeline" | "tasks">("timeline")
   const [metrics, setMetrics] = useState({
@@ -144,11 +145,31 @@ function ExecutionPlanPageContent() {
   const [activeVideoIndex, setActiveVideoIndex] = useState<number | null>(null)
 
   const [chatMessages, setChatMessages] = useState<{ role: "ai" | "user", text: string }[]>([
-    { role: "ai", text: `Hello! I'm your AgriFlow AI. I see we're planning for ${crop === "vegetables" ? "Mixed Vegetables" : crop}. How can I assist you with this execution plan today?` }
+    { role: "ai", text: "Hello! I'm your AgriFlow AI. How can I assist you with this execution plan today?" }
   ])
   const [draftMessage, setDraftMessage] = useState("")
 
   const chatEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const workspaceCrop = readWorkspace()?.selectedExecutionCrop?.cropName
+    const nextCrop = searchParams.get("crop") || workspaceCrop || "Wheat"
+    setCrop(nextCrop)
+    setChatMessages((prev) => {
+      if (prev.length !== 1 || prev[0]?.role !== "ai") {
+        return prev
+      }
+
+      return [
+        {
+          role: "ai",
+          text: `Hello! I'm your AgriFlow AI. I see we're planning for ${
+            nextCrop === "vegetables" ? "Mixed Vegetables" : nextCrop
+          }. How can I assist you with this execution plan today?`,
+        },
+      ]
+    })
+  }, [searchParams])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })

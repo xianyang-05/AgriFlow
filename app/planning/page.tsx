@@ -43,17 +43,29 @@ import {
   ResponsiveContainer,
 } from "recharts"
 import {
-  createRecommendation,
   createPreviewRecommendation,
   type ClimateOutput,
   type ForecastBlock,
-  getRecommendation,
   getRecommendationErrorMessage,
-  sendRecommendationChatMessage,
   sendPreviewRecommendationChatMessage,
+  type RecommendationCreatePayload,
   type RankedCrop,
   type RecommendationResponse,
 } from "@/lib/recommendations"
+import {
+  appendRecommendationVersion,
+  createWorkspaceFromRecommendation,
+  getDefaultPlanAssistantChat,
+  readWorkspace,
+  resolvePreferredStrategy,
+  revertRecommendationVersion,
+  type OnboardingFormData,
+  type PlanAssistantMessage,
+  type StrategyKey,
+  updatePlanAssistantChat,
+  updateSelectedExecutionCrop,
+  updateSelectedStrategy,
+} from "@/lib/local-workspace"
 
 const marketData = [
   { month: "Jan", wheat: 280, rice: 320, corn: 180, vegetables: 420, tomato: 510 },
@@ -65,8 +77,6 @@ const marketData = [
 ]
 
 type CropIcon = typeof Wheat
-
-type StrategyKey = "aggressive" | "conservative"
 
 interface StrategyRecommendationCard {
   strategy: StrategyKey
@@ -509,6 +519,56 @@ function getLocationLabel(recommendation: RecommendationResponse | null) {
   return ""
 }
 
+function parseCoordinatesFromText(locationText: string | null) {
+  if (!locationText) {
+    return null
+  }
+
+  const match = locationText.match(
+    /^\s*(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)\s*$/,
+  )
+  if (!match) {
+    return null
+  }
+
+  return {
+    lat: Number.parseFloat(match[1]),
+    lng: Number.parseFloat(match[2]),
+  }
+}
+
+function buildDraftPayloadFromSearchParams(params: {
+  areaText: string | null
+  budgetText: string | null
+  locationText: string | null
+  soilTypeText: string | null
+}): RecommendationCreatePayload | null {
+  if (!params.areaText && !params.budgetText && !params.locationText && !params.soilTypeText) {
+    return null
+  }
+
+  return {
+    area_text: params.areaText,
+    budget_text: params.budgetText,
+    location_text: params.locationText,
+    notes: null,
+    soil_type_text: params.soilTypeText,
+  }
+}
+
+function buildFallbackFormData(payload: RecommendationCreatePayload): OnboardingFormData {
+  return {
+    location: payload.location_text ?? "",
+    coordinates: parseCoordinatesFromText(payload.location_text),
+    farmSize: payload.area_text ?? "",
+    farmLength: "",
+    farmWidth: "",
+    requiresDimensions: false,
+    budget: payload.budget_text ?? "",
+    soilType: payload.soil_type_text ?? "",
+  }
+}
+
 function getMockSeriesKey(cropId: string) {
   const key = cropId.toLowerCase()
 
@@ -535,7 +595,6 @@ function getMockSeriesKey(cropId: string) {
 function PlanningPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const runIdParam = searchParams.get("runId")
   const draftAreaText = searchParams.get("area_text")
   const draftBudgetText = searchParams.get("budget_text")
   const draftLocationText = searchParams.get("location_text")
@@ -546,16 +605,9 @@ function PlanningPageContent() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [chatInput, setChatInput] = useState("")
   const [isChatLoading, setIsChatLoading] = useState(false)
-  const [chatMessages, setChatMessages] = useState<
-    { role: "user" | "bot"; content: string }[]
-  >([
-    {
-      role: "bot",
-      content:
-        "Hi! I'm your AgriFlow plan assistant. Ask me to tune this recommendation by changing budget, harvest speed, risk preference, or excluding crops.",
-    },
-  ])
+  const [chatMessages, setChatMessages] = useState<PlanAssistantMessage[]>(getDefaultPlanAssistantChat())
   const [isAssistantExpanded, setIsAssistantExpanded] = useState(false)
+  const [hasHydratedWorkspace, setHasHydratedWorkspace] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -565,43 +617,76 @@ function PlanningPageContent() {
       setIsLoading(true)
       setLoadError(null)
 
-      if (!runIdParam && !draftAreaText && !draftBudgetText && !draftLocationText && !draftSoilTypeText) {
+      const workspace = readWorkspace()
+      const draftPayload =
+        workspace?.farmDraft?.recommendationPayload ??
+        buildDraftPayloadFromSearchParams({
+          areaText: draftAreaText,
+          budgetText: draftBudgetText,
+          locationText: draftLocationText,
+          soilTypeText: draftSoilTypeText,
+        })
+
+      if (workspace?.currentRecommendation) {
         if (isActive) {
-          setRecommendation(null)
+          setRecommendation(workspace.currentRecommendation)
+          setSelectedStrategy(workspace.selectedStrategy)
+          setChatMessages(
+            workspace.planAssistantChat.length > 0
+              ? workspace.planAssistantChat
+              : getDefaultPlanAssistantChat(),
+          )
           setIsLoading(false)
-          setLoadError("No saved plan was found. Generate a plan from the onboarding flow first.")
+          setHasHydratedWorkspace(true)
         }
         return
       }
 
-      let nextRecommendation: RecommendationResponse
-      try {
-        if (runIdParam) {
-          nextRecommendation = await getRecommendation(runIdParam)
-        } else {
-          nextRecommendation = await createPreviewRecommendation({
-            area_text: draftAreaText,
-            budget_text: draftBudgetText,
-            location_text: draftLocationText,
-            notes: null,
-            soil_type_text: draftSoilTypeText,
-          })
+      if (!draftPayload) {
+        if (isActive) {
+          setRecommendation(null)
+          setIsLoading(false)
+          setLoadError("No local plan was found on this device. Generate a plan from the onboarding flow first.")
+          setHasHydratedWorkspace(true)
         }
+        router.replace("/")
+        return
+      }
+
+      try {
+        const nextRecommendation = await createPreviewRecommendation(draftPayload)
+        const nextWorkspace = createWorkspaceFromRecommendation({
+          farmDraft:
+            workspace?.farmDraft ??
+            {
+              formData: buildFallbackFormData(draftPayload),
+              recommendationPayload: draftPayload,
+            },
+          soilAssistantChat: workspace?.soilAssistantChat,
+          recommendation: nextRecommendation,
+          selectedStrategy: resolvePreferredStrategy(
+            nextRecommendation,
+            workspace?.selectedStrategy ?? "aggressive",
+          ),
+        })
+
+        if (!isActive) {
+          return
+        }
+
+        setRecommendation(nextWorkspace.currentRecommendation)
+        setSelectedStrategy(nextWorkspace.selectedStrategy)
+        setChatMessages(nextWorkspace.planAssistantChat)
+        setIsLoading(false)
+        setHasHydratedWorkspace(true)
       } catch (error) {
         if (isActive) {
           setRecommendation(null)
           setIsLoading(false)
           setLoadError(getRecommendationErrorMessage(error))
+          setHasHydratedWorkspace(true)
         }
-        return
       }
-
-      if (!isActive) {
-        return
-      }
-
-      setRecommendation(nextRecommendation)
-      setIsLoading(false)
     }
 
     loadRecommendation()
@@ -609,7 +694,23 @@ function PlanningPageContent() {
     return () => {
       isActive = false
     }
-  }, [draftAreaText, draftBudgetText, draftLocationText, draftSoilTypeText, runIdParam])
+  }, [draftAreaText, draftBudgetText, draftLocationText, draftSoilTypeText, router])
+
+  useEffect(() => {
+    if (!hasHydratedWorkspace || !recommendation) {
+      return
+    }
+
+    updateSelectedStrategy(selectedStrategy)
+  }, [hasHydratedWorkspace, recommendation, selectedStrategy])
+
+  useEffect(() => {
+    if (!hasHydratedWorkspace || !recommendation) {
+      return
+    }
+
+    updatePlanAssistantChat(chatMessages)
+  }, [chatMessages, hasHydratedWorkspace, recommendation])
 
   useEffect(() => {
     const availableStrategies = buildStrategyCards(recommendation).map((card) => card.strategy)
@@ -631,7 +732,7 @@ function PlanningPageContent() {
     if (riskPreference === "high") {
       setSelectedStrategy("aggressive")
     }
-  }, [recommendation?.version_number, recommendation?.user_preferences?.risk_preference])
+  }, [recommendation?.user_preferences?.risk_preference])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -643,37 +744,51 @@ function PlanningPageContent() {
       return
     }
 
-    const activeRunId = recommendation?.run_id ?? runIdParam
-
     setChatInput("")
-    setChatMessages((prev) => [...prev, { role: "user", content: outgoingMessage }])
+    const nextUserMessages = [...chatMessages, { role: "user" as const, content: outgoingMessage }]
+    setChatMessages(nextUserMessages)
     setIsChatLoading(true)
 
     try {
-      const response = activeRunId
-        ? await sendRecommendationChatMessage(activeRunId, outgoingMessage)
-        : await sendPreviewRecommendationChatMessage(recommendation, outgoingMessage)
-      const nextRecommendation = response.updated_recommendation
-
-      if (nextRecommendation) {
-        setRecommendation(nextRecommendation)
-      }
-
-      setChatMessages((prev) => [
-        ...prev,
+      const localVersionCount = readWorkspace()?.recommendationVersions.length ?? 0
+      const response = await sendPreviewRecommendationChatMessage(
+        recommendation,
+        outgoingMessage,
+        localVersionCount > 1,
+      )
+      const nextChatMessages = [
+        ...nextUserMessages,
         {
-          role: "bot",
+          role: "bot" as const,
           content: response.assistant_message,
         },
-      ])
+      ]
+
+      if (response.should_revert_locally) {
+        const revertedWorkspace = revertRecommendationVersion()
+        if (revertedWorkspace?.currentRecommendation) {
+          setRecommendation(revertedWorkspace.currentRecommendation)
+          setSelectedStrategy(revertedWorkspace.selectedStrategy)
+        }
+      } else if (response.intent === "modification" && response.updated_recommendation) {
+        const nextStrategy = resolvePreferredStrategy(response.updated_recommendation, selectedStrategy)
+        const updatedWorkspace = appendRecommendationVersion(response.updated_recommendation, nextStrategy)
+        setRecommendation(updatedWorkspace.currentRecommendation)
+        setSelectedStrategy(updatedWorkspace.selectedStrategy)
+      }
+
+      setChatMessages(nextChatMessages)
+      updatePlanAssistantChat(nextChatMessages)
     } catch (error) {
-      setChatMessages((prev) => [
-        ...prev,
+      const nextChatMessages = [
+        ...nextUserMessages,
         {
-          role: "bot",
+          role: "bot" as const,
           content: getRecommendationErrorMessage(error),
         },
-      ])
+      ]
+      setChatMessages(nextChatMessages)
+      updatePlanAssistantChat(nextChatMessages)
     } finally {
       setIsChatLoading(false)
     }
@@ -684,34 +799,12 @@ function PlanningPageContent() {
       return
     }
 
-    if (recommendation?.run_id) {
-      router.push(`/execution-plan?crop=${selectedRecommendation.cropId}`)
-      return
-    }
-
-    if (!draftAreaText && !draftBudgetText && !draftLocationText && !draftSoilTypeText) {
-      setLoadError("We could not find the draft farm data to save. Please generate the recommendation again.")
-      return
-    }
-
-    try {
-      setIsLoading(true)
-      setLoadError(null)
-      const persistedRecommendation = await createRecommendation({
-        area_text: draftAreaText,
-        budget_text: draftBudgetText,
-        location_text: draftLocationText,
-        notes: null,
-        soil_type_text: draftSoilTypeText,
-      })
-
-      setRecommendation(persistedRecommendation)
-      router.push(`/execution-plan?crop=${selectedRecommendation.cropId}`)
-    } catch (error) {
-      setLoadError(getRecommendationErrorMessage(error))
-    } finally {
-      setIsLoading(false)
-    }
+    updateSelectedExecutionCrop({
+      cropId: selectedRecommendation.cropId,
+      cropName: selectedRecommendation.cropName,
+      strategy: selectedRecommendation.strategy,
+    })
+    router.push(`/execution-plan?crop=${encodeURIComponent(selectedRecommendation.cropName)}`)
   }
 
   const strategyRecommendations = buildStrategyCards(recommendation)
@@ -1082,9 +1175,7 @@ function PlanningPageContent() {
                     Plan Assistant
                   </CardTitle>
                   <CardDescription className={`text-xs ${isAssistantExpanded ? "text-white/70" : ""}`}>
-                    {recommendation?.run_id
-                      ? "Tune your crop recommendation with chat"
-                      : "Tune this preview without saving it yet."}
+                    Tune the plan stored on this device with chat.
                   </CardDescription>
                 </div>
                 <Button

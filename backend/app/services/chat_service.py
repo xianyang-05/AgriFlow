@@ -359,8 +359,25 @@ class ChatService:
         current,
         classification: IntentClassification,
     ) -> ChatResponse:
+        if request.has_previous_version:
+            assistant_message = "Reverted to the previous locally stored recommendation snapshot."
+            return ChatResponse(
+                run_id=None,
+                intent=classification.intent,
+                confidence=classification.confidence,
+                assistant_message=assistant_message,
+                updated_recommendation=current,
+                has_previous_version=True,
+                should_revert_locally=True,
+                status=current.status,
+                clarification_needed=current.clarification_needed,
+                clarification_questions=current.clarification_questions,
+                warnings=current.warnings,
+            )
+
         assistant_message = (
-            "Preview chat can answer questions and tune the draft plan, but revert is only available after you save the plan."
+            "There isn't a previous locally stored recommendation snapshot to revert to yet. "
+            "Ask me to adjust the current plan instead."
         )
         return ChatResponse(
             run_id=None,

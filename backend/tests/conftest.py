@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.adapters.climate_model_adapter import ClimateModelAdapter
+from app.config import get_settings
 from app.database import Base, get_db
 from app.main import app
 from app.repositories.chat_repository import ChatRepository
@@ -145,6 +146,7 @@ def db_session():
 
 @pytest.fixture
 def test_services(db_session, climate_output, monkeypatch):
+    get_settings().persistence_mode = "database"
     llm = MockLLMService()
     climate_service = ClimateService(adapter=StubClimateAdapter(climate_output))
     recommendation = RecommendationService(
@@ -174,6 +176,9 @@ def test_services(db_session, climate_output, monkeypatch):
     monkeypatch.setattr(health.GeocodingService, "check_health", lambda self: {"status": "configured"})
     monkeypatch.setattr(health.AltitudeService, "check_health", lambda self: {"status": "configured"})
     monkeypatch.setattr(health.ClimateModelAdapter, "check_health", lambda self: {"status": "configured"})
+    monkeypatch.setattr("app.routes.recommendations.settings.persistence_mode", "database")
+    monkeypatch.setattr("app.routes.chat.settings.persistence_mode", "database")
+    monkeypatch.setattr("app.routes.health.settings.persistence_mode", "database")
 
     return {"llm": llm, "recommendation": recommendation, "chat": chat}
 

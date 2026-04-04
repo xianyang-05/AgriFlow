@@ -162,3 +162,26 @@ def test_preview_chat_modify_reruns_without_saving_version(db_session, test_serv
     assert response.updated_recommendation.run_id is None
     assert response.updated_recommendation.version_number is None
     assert response.updated_recommendation.user_preferences.harvest_preference == "fast"
+
+
+def test_preview_chat_revert_signals_local_restore(db_session, test_services):
+    preview = test_services["recommendation"].preview_recommendation(
+        db_session,
+        RawInput(area_text="1 acre", budget_text="10000", location_text="Penang"),
+    )
+    llm = test_services["llm"]
+    llm.intent_response = IntentClassification(intent="revert", confidence=0.95)
+    llm.revert_disambiguation_response = IntentClassification(intent="revert", confidence=0.98)
+
+    response = test_services["chat"].handle_preview(
+        db_session,
+        PreviewChatRequest(
+            message="revert to the previous plan",
+            current_recommendation=preview,
+            has_previous_version=True,
+        ),
+    )
+
+    assert response.intent == "revert"
+    assert response.should_revert_locally is True
+    assert response.assistant_message.startswith("Reverted to the previous locally stored")

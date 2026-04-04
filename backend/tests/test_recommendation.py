@@ -29,6 +29,19 @@ def test_recommendation_preview_does_not_create_persisted_run(db_session, test_s
     assert response.version_number is None
 
 
+def test_recommendation_preview_uses_seed_crops_without_db_in_local_mode(test_services):
+    test_services["recommendation"].settings.persistence_mode = "local"
+
+    response = test_services["recommendation"].preview_recommendation(
+        None,
+        RawInput(area_text="1 acre", budget_text="10000", location_text="Penang"),
+    )
+
+    assert response.status == "complete"
+    assert response.run_id is None
+    assert response.ranked_crops
+
+
 def test_recommendation_handles_geocoding_failure(db_session, test_services):
     class FailingGeocoder:
         def geocode(self, location_text):

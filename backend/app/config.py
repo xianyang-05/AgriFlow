@@ -1,6 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
 
+from typing import Literal
+
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -14,6 +16,7 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False, validation_alias=AliasChoices("APP_DEBUG", "DEBUG"))
     api_v1_prefix: str = "/api/v1"
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/agriflow"
+    persistence_mode: Literal["database", "local"] = "database"
     ollama_base_url: str = "https://ollama.com"
     ollama_api_key: str = ""
     ollama_model: str = "llama3.2"

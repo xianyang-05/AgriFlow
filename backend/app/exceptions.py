@@ -79,3 +79,8 @@ class LLMError(DomainError):
 class RunNotFoundError(DomainError):
     def __init__(self, message: str = "Recommendation run not found") -> None:
         super().__init__(message=message, http_status=404)
+
+
+class UnsupportedPersistenceModeError(DomainError):
+    def __init__(self, message: str = "This endpoint is unavailable when local persistence mode is enabled.") -> None:
+        super().__init__(message=message, http_status=503)

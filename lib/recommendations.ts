@@ -100,6 +100,7 @@ export interface RecommendationResponse {
   warnings: string[]
   run_id: string | null
   version_number?: number | null
+  has_previous_version?: boolean
   normalized_input?: NormalizedFarmInput | null
   user_preferences?: UserPreferences
   ranked_crops: RankedCrop[]
@@ -111,12 +112,13 @@ export interface RecommendationResponse {
 }
 
 export interface RecommendationChatResponse {
-  run_id: string
+  run_id: string | null
   intent: "question" | "modification" | "revert"
   confidence: number
   assistant_message: string
   updated_recommendation: RecommendationResponse | null
   has_previous_version: boolean
+  should_revert_locally?: boolean
   status: RecommendationResponse["status"]
   clarification_needed: boolean
   clarification_questions: string[]
@@ -198,10 +200,12 @@ export async function sendRecommendationChatMessage(runId: string, message: stri
 export async function sendPreviewRecommendationChatMessage(
   currentRecommendation: RecommendationResponse,
   message: string,
+  hasPreviousVersion = false,
 ) {
   return request<RecommendationChatResponse>("/api/v1/chat/preview", {
     method: "POST",
     body: JSON.stringify({
+      has_previous_version: hasPreviousVersion,
       message,
       current_recommendation: currentRecommendation,
     }),

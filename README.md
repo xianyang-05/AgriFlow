@@ -16,7 +16,7 @@ baseline unless you install the optional backend `ml` extra on another host.
 
 ## Required Vercel environment variables
 
-- `DATABASE_URL`
+- `PERSISTENCE_MODE=local`
 - `OLLAMA_BASE_URL=https://ollama.com`
 - `OLLAMA_API_KEY`
 - `OLLAMA_MODEL=gemma3`
@@ -38,4 +38,4 @@ baseline unless you install the optional backend `ml` extra on another host.
 - `CORS_ORIGINS`
 - `OLLAMA_VISION_MODEL=gemma3`
 
-Use the repo-root `.env` for real local secrets. The committed `.env.example` file is the template.
+In local persistence mode, the planning workspace is stored in the browser and the backend preview routes do not require a database. Use the repo-root `.env` for real local secrets. The committed `.env.example` file is the template.
