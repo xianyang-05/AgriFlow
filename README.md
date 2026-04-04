@@ -19,7 +19,7 @@ baseline unless you install the optional backend `ml` extra on another host.
 - `DATABASE_URL`
 - `OLLAMA_BASE_URL=https://ollama.com`
 - `OLLAMA_API_KEY`
-- `OLLAMA_MODEL=llama3.2`
+- `OLLAMA_MODEL=gemma3`
 - `NEXT_PUBLIC_API_BASE_URL=/server`
 
 ## Optional backend environment variables
@@ -36,6 +36,6 @@ baseline unless you install the optional backend `ml` extra on another host.
 - `DEFAULT_FORECAST_HORIZON_MONTHS`
 - `DEFAULT_CURRENCY`
 - `CORS_ORIGINS`
-- `OLLAMA_VISION_MODEL=llava`
+- `OLLAMA_VISION_MODEL=gemma3`
 
 Use the repo-root `.env` for real local secrets. The committed `.env.example` file is the template.

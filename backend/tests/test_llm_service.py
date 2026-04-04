@@ -159,6 +159,53 @@ def test_llm_service_retries_with_supported_model_when_configured_model_is_missi
     assert payload["missing_model"] == "llama3"
 
 
+def test_llm_service_uses_cloud_safe_fallback_when_llama32_is_unavailable(monkeypatch):
+    logger = FakeLogger()
+    monkeypatch.setattr(
+        "app.services.llm_service.get_settings",
+        lambda: SimpleNamespace(
+            ollama_base_url="https://ollama.com",
+            ollama_api_key="secret-key",
+            ollama_model="llama3.2",
+            request_timeout_seconds=1,
+        ),
+    )
+    monkeypatch.setattr("app.services.llm_service.get_logger", lambda: logger)
+
+    requested_models: list[str] = []
+
+    class FallbackClient:
+        def __init__(self, timeout, headers):
+            self.timeout = timeout
+            self.headers = headers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def post(self, url, json):
+            request = httpx.Request("POST", url, headers=self.headers)
+            requested_models.append(str(json["model"]))
+            if json["model"] == "llama3.2":
+                return httpx.Response(404, request=request, json={"error": "model 'llama3.2' not found"})
+            return httpx.Response(200, request=request, json={"message": {"content": "cloud ok"}})
+
+    monkeypatch.setattr("app.services.llm_service.httpx.Client", FallbackClient)
+
+    service = LLMService()
+    result = service._chat("system", "user")
+
+    assert result == "cloud ok"
+    assert requested_models == ["llama3.2", "gemma3"]
+    assert logger.warnings
+    event, payload = logger.warnings[0]
+    assert event == "ollama.model_fallback"
+    assert payload["fallback_model"] == "gemma3"
+    assert payload["missing_model"] == "llama3.2"
+
+
 def test_llm_health_reports_auth_metadata(monkeypatch):
     logger = FakeLogger()
     monkeypatch.setattr(

@@ -15,6 +15,8 @@ const DEFAULT_OLLAMA_VISION_MODEL = "llava"
 const DEFAULT_TIMEOUT_MS = 10_000
 const MODEL_FALLBACKS: Record<string, string> = {
   llama3: DEFAULT_OLLAMA_TEXT_MODEL,
+  [DEFAULT_OLLAMA_TEXT_MODEL]: "gemma3",
+  llava: "gemma3",
 }
 
 export class OllamaRequestError extends Error {

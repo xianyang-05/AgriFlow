@@ -15,6 +15,8 @@ from app.schemas.input import RawInput
 DEFAULT_OLLAMA_TEXT_MODEL = "llama3.2"
 MODEL_FALLBACKS = {
     "llama3": DEFAULT_OLLAMA_TEXT_MODEL,
+    DEFAULT_OLLAMA_TEXT_MODEL: "gemma3",
+    "llava": "gemma3",
 }
 
 
