@@ -6,11 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
-import { 
-  Cloud, Sun, CloudRain, Droplets, ThermometerSun, Wind, 
+import {
+  Cloud, Sun, CloudRain, Droplets, ThermometerSun, Wind,
   AlertTriangle, CheckCircle2, ArrowRight, Waves, Flame,
-  CloudSun, Snowflake, Loader2, ShieldAlert, ChevronRight
+  CloudSun, Snowflake, Loader2, ShieldAlert, ChevronRight,
+  VolumeX, Volume2, Ruler
 } from "lucide-react"
+import { useRef } from "react"
 import dynamic from "next/dynamic"
 
 const InsurancePdfButton = dynamic(() => import("./InsurancePdfButton"), {
@@ -24,14 +26,51 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+} from "recharts"
+
+// Reusable audio player that handles volume and autoplay securely
+const WeatherAudio = ({ src, isSoundEnabled }: { src: string, isSoundEnabled: boolean }) => {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = 1.0;
+      if (isSoundEnabled) {
+        audioRef.current.play().catch(e => console.log("Audio playback blocked.", e));
+      } else {
+        audioRef.current.pause();
+      }
+    }
+  }, [src, isSoundEnabled]);
+  return <audio ref={audioRef} src={src} autoPlay={isSoundEnabled} loop muted={!isSoundEnabled} />;
+}
+
 const forecastData = [
-  { day: "Mon", high: 32, low: 24, rain: 0, humidity: 55, icon: "sunny" },
-  { day: "Tue", high: 34, low: 25, rain: 0, humidity: 50, icon: "sunny" },
-  { day: "Wed", high: 30, low: 23, rain: 5, humidity: 65, icon: "cloudy" },
-  { day: "Thu", high: 28, low: 22, rain: 15, humidity: 75, icon: "rainy" },
-  { day: "Fri", high: 31, low: 24, rain: 2, humidity: 60, icon: "partly-cloudy" },
-  { day: "Sat", high: 33, low: 25, rain: 0, humidity: 52, icon: "sunny" },
-  { day: "Sun", high: 32, low: 24, rain: 0, humidity: 55, icon: "sunny" },
+  { day: "Mon", high: 32, low: 24, rain: 0, humidity: 48, icon: "sunny" },
+  { day: "Tue", high: 34, low: 25, rain: 0, humidity: 42, icon: "sunny" },
+  { day: "Wed", high: 30, low: 23, rain: 5, humidity: 68, icon: "cloudy" },
+  { day: "Thu", high: 28, low: 22, rain: 15, humidity: 88, icon: "rainy" },
+  { day: "Fri", high: 31, low: 24, rain: 2, humidity: 62, icon: "partly-cloudy" },
+  { day: "Sat", high: 33, low: 25, rain: 0, humidity: 45, icon: "sunny" },
+  { day: "Sun", high: 32, low: 24, rain: 0, humidity: 51, icon: "sunny" },
+]
+
+const temperatureHistory = [
+  { hour: "6AM", temp: 22, humidity: 80 },
+  { hour: "9AM", temp: 26, humidity: 70 },
+  { hour: "12PM", temp: 31, humidity: 55 },
+  { hour: "3PM", temp: 34, humidity: 45 },
+  { hour: "6PM", temp: 30, humidity: 55 },
+  { hour: "9PM", temp: 26, humidity: 65 },
 ]
 
 const riskIndicators = [
@@ -169,6 +208,9 @@ export default function ClimatePage() {
   const [seasonalData, setSeasonalData] = useState<{ month: string; rainfall: number }[]>(fallbackSeasonalData)
   const [floodRisk, setFloodRisk] = useState<"low" | "medium" | "high">("medium")
   const [seasonalError, setSeasonalError] = useState<string | null>(null)
+  const [isSoundEnabled, setIsSoundEnabled] = useState(false)
+  const weatherIcon = today.icon
+  const soundSrc = weatherIcon === "rainy" ? "https://upload.wikimedia.org/wikipedia/commons/4/4e/Rain_Sound_Effect.ogg" : weatherIcon === "cloudy" ? "https://upload.wikimedia.org/wikipedia/commons/2/25/Wind_Sound_Effect.ogg" : "https://upload.wikimedia.org/wikipedia/commons/1/1b/Birdsong_-_nature_sounds_-_238.ogg"
 
   useEffect(() => {
     const applySeasonalRisk = (data: { month: string; rainfall: number }[]) => {
@@ -246,10 +288,20 @@ export default function ClimatePage() {
               Weather forecasts and risk assessments
             </p>
           </div>
+          <div className="ml-auto">
+            <button
+              onClick={() => setIsSoundEnabled(!isSoundEnabled)}
+              className="bg-muted hover:bg-muted/80 p-2.5 rounded-full transition-all border border-border"
+              title={isSoundEnabled ? "Disable sounds" : "Enable sounds"}
+            >
+              {isSoundEnabled ? <Volume2 className="h-5 w-5 text-primary" /> : <VolumeX className="h-5 w-5 text-muted-foreground" />}
+            </button>
+          </div>
         </div>
       </header>
 
       <div className="p-6 space-y-6">
+        <WeatherAudio src={soundSrc} isSoundEnabled={isSoundEnabled} />
         {/* Current Weather Banner */}
         <Card className="shadow-lg shadow-primary/5 bg-gradient-to-br from-primary/10 via-background to-background border-primary/20">
           <CardContent className="p-6">
@@ -264,13 +316,20 @@ export default function ClimatePage() {
                   <p className="text-muted-foreground mt-1">Sunny, feels like {today.high + 2}{"\u00B0"}C</p>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-6">
+              <div className="grid grid-cols-4 gap-6">
                 <div className="text-center">
                   <div className="h-10 w-10 rounded-xl bg-info/10 flex items-center justify-center mx-auto mb-2">
                     <Droplets className="h-5 w-5 text-info" />
                   </div>
                   <p className="text-xs text-muted-foreground">Humidity</p>
                   <p className="text-lg font-semibold text-foreground">{today.humidity}%</p>
+                </div>
+                <div className="text-center">
+                  <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center mx-auto mb-2">
+                    <Ruler className="h-5 w-5 text-amber-600" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Height</p>
+                  <p className="text-lg font-semibold text-foreground">85 cm</p>
                 </div>
                 <div className="text-center">
                   <div className="h-10 w-10 rounded-xl bg-muted flex items-center justify-center mx-auto mb-2">
@@ -307,9 +366,8 @@ export default function ClimatePage() {
                   {forecastData.map((day, index) => (
                     <div
                       key={day.day}
-                      className={`p-3 rounded-xl text-center transition-colors ${
-                        index === 0 ? "bg-primary/10 border border-primary/30" : "bg-muted/50 hover:bg-muted"
-                      }`}
+                      className={`p-3 rounded-xl text-center transition-colors ${index === 0 ? "bg-primary/10 border border-primary/30" : "bg-muted/50 hover:bg-muted"
+                        }`}
                     >
                       <p className={`text-sm font-medium ${index === 0 ? "text-primary" : "text-foreground"}`}>
                         {day.day}
@@ -345,11 +403,10 @@ export default function ClimatePage() {
                   {forecastData.map((day, index) => (
                     <div
                       key={day.day}
-                      className={`rounded-2xl border p-3 text-center transition-colors ${
-                        index === 0
+                      className={`rounded-2xl border p-3 text-center transition-colors ${index === 0
                           ? "border-primary/25 bg-primary/8 shadow-sm"
                           : "border-border/60 bg-muted/40 hover:bg-muted/60"
-                      }`}
+                        }`}
                     >
                       <p className={`text-sm font-medium ${index === 0 ? "text-primary" : "text-foreground"}`}>
                         {day.day}
@@ -382,11 +439,10 @@ export default function ClimatePage() {
               <div className="pointer-events-none absolute -left-16 top-12 h-32 w-32 rounded-full bg-emerald-200/20 blur-2xl" />
               <CardHeader>
                 <div className="mb-3 flex items-center gap-3">
-                  <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${
-                    floodRisk === "high"
+                  <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${floodRisk === "high"
                       ? "border-destructive/25 bg-destructive/10 text-destructive"
                       : "border-emerald-200 bg-emerald-100/80 text-emerald-700"
-                  }`}>
+                    }`}>
                     <ShieldAlert className="h-5 w-5" />
                   </div>
                   <div className="space-y-1">
@@ -408,125 +464,124 @@ export default function ClimatePage() {
               </CardHeader>
               <CardContent className="space-y-6">
                 <>
-                    {seasonalError && (
-                      <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-foreground">
-                        {seasonalError}
+                  {seasonalError && (
+                    <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-foreground">
+                      {seasonalError}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Flood Warning */}
+                    <div className={`rounded-2xl border p-5 shadow-sm ${floodRisk === "high" ? "border-destructive/30 bg-destructive/10" : "border-border bg-white/75"}`}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertTriangle className={`h-4 w-4 ${floodRisk === "high" ? "text-destructive" : "text-muted-foreground"}`} />
+                        <h4 className="font-semibold text-foreground">Flood Alert</h4>
                       </div>
-                    )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Flood Warning */}
-                      <div className={`rounded-2xl border p-5 shadow-sm ${floodRisk === "high" ? "border-destructive/30 bg-destructive/10" : "border-border bg-white/75"}`}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <AlertTriangle className={`h-4 w-4 ${floodRisk === "high" ? "text-destructive" : "text-muted-foreground"}`} />
-                          <h4 className="font-semibold text-foreground">Flood Alert</h4>
-                        </div>
-                        {floodRisk === "high" ? (
-                          <p className="text-sm text-destructive font-medium">
-                            Heavy rain expected (&gt;{Math.max(...seasonalData.map(d => d.rainfall), fallbackMaxRainfall).toFixed(0)}mm) {"\u2192"} Potential flooding {"\u2192"} Recommend drainage
-                          </p>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">Standard rainfall expected. Routine monitoring advised.</p>
-                        )}
-                      </div>
-
-                      {/* Drainage Plan */}
-                      <div className="rounded-2xl border border-sky-200 bg-sky-50/80 p-5 shadow-sm">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Waves className="h-4 w-4 text-sky-600" />
-                          <h4 className="font-semibold text-foreground">Drainage Response</h4>
-                        </div>
-                        <p className="text-sm text-foreground">
-                          {floodRisk === "high" ? "Activate secondary pumps by mid-month. Clean main canal immediately." : "Maintain normal drainage operations."}
+                      {floodRisk === "high" ? (
+                        <p className="text-sm text-destructive font-medium">
+                          Heavy rain expected (&gt;{Math.max(...seasonalData.map(d => d.rainfall), fallbackMaxRainfall).toFixed(0)}mm) {"\u2192"} Potential flooding {"\u2192"} Recommend drainage
                         </p>
-                      </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Standard rainfall expected. Routine monitoring advised.</p>
+                      )}
                     </div>
 
-                    {/* Crop Loss Estimate */}
-                    <div className="rounded-2xl border border-border bg-white/80 p-5 shadow-sm">
-                      <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                        <ArrowRight className="h-4 w-4 text-warning" />
-                        Estimated Crop Exposure
-                      </h4>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm text-muted-foreground">Estimated Exposure</span>
-                        <span className="font-semibold text-destructive">{floodRisk === "high" ? "35%" : "5%"} at risk</span>
+                    {/* Drainage Plan */}
+                    <div className="rounded-2xl border border-sky-200 bg-sky-50/80 p-5 shadow-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Waves className="h-4 w-4 text-sky-600" />
+                        <h4 className="font-semibold text-foreground">Drainage Response</h4>
                       </div>
-                      <Progress value={floodRisk === "high" ? 35 : 5} className="h-2 mb-2 bg-muted" aria-label="Crop Loss Progress" />
-                      <p className="text-xs text-muted-foreground text-right">
-                        Potential financial impact: <span className="font-semibold text-foreground">RM {floodRisk === "high" ? "12,500" : "1,800"}</span>
+                      <p className="text-sm text-foreground">
+                        {floodRisk === "high" ? "Activate secondary pumps by mid-month. Clean main canal immediately." : "Maintain normal drainage operations."}
                       </p>
                     </div>
+                  </div>
 
-                    {/* Insurance Advisory CTA */}
-                    {floodRisk === "high" && (
+                  {/* Crop Loss Estimate */}
+                  <div className="rounded-2xl border border-border bg-white/80 p-5 shadow-sm">
+                    <h4 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                      <ArrowRight className="h-4 w-4 text-warning" />
+                      Estimated Crop Exposure
+                    </h4>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-muted-foreground">Estimated Exposure</span>
+                      <span className="font-semibold text-destructive">{floodRisk === "high" ? "35%" : "5%"} at risk</span>
+                    </div>
+                    <Progress value={floodRisk === "high" ? 35 : 5} className="h-2 mb-2 bg-muted" aria-label="Crop Loss Progress" />
+                    <p className="text-xs text-muted-foreground text-right">
+                      Potential financial impact: <span className="font-semibold text-foreground">RM {floodRisk === "high" ? "12,500" : "1,800"}</span>
+                    </p>
+                  </div>
+
+                  {/* Insurance Advisory CTA */}
+                  {floodRisk === "high" && (
                     <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-emerald-100/70 p-5">
-                        <div>
-                          <h4 className="font-semibold text-emerald-800">Recommended Protection Plan</h4>
-                          <p className="text-sm text-emerald-700/90">Secure subsidized crop cover before flood exposure rises further.</p>
-                        </div>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700">
-                              Explore Coverage
-                              <ChevronRight className="h-4 w-4" />
-                            </Button>
-                          </DialogTrigger>
-                            <DialogContent className="top-4 max-h-[calc(100vh-2rem)] max-w-[calc(100vw-1rem)] translate-y-0 overflow-x-hidden overflow-y-auto sm:top-6 sm:max-w-[980px]">
-                            <DialogHeader>
-                              <DialogTitle className="flex items-center gap-2">
-                                <CheckCircle2 className="h-5 w-5 text-primary" />
-                                Enroll in Agrobank STTP
-                              </DialogTitle>
-                              <DialogDescription>
-                                High flood risk detected. Secure your crop with Malaysia's subsidized paddy insurance.
-                              </DialogDescription>
-                            </DialogHeader>
-                            
-                            <div className="space-y-4 py-4">
-                              <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Coverage</span>
-                                  <span className="font-medium">Flood, Drought, Pests</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Estimated Premium</span>
-                                  <span className="font-medium">RM 64.80 / ha</span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-muted-foreground">Max Payout</span>
-                                  <span className="font-bold text-success">RM 3,000 / ha</span>
-                                </div>
+                      <div>
+                        <h4 className="font-semibold text-emerald-800">Recommended Protection Plan</h4>
+                        <p className="text-sm text-emerald-700/90">Secure subsidized crop cover before flood exposure rises further.</p>
+                      </div>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button className="gap-2 bg-emerald-600 hover:bg-emerald-700">
+                            Explore Coverage
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="top-4 max-h-[calc(100vh-2rem)] max-w-[calc(100vw-1rem)] translate-y-0 overflow-x-hidden overflow-y-auto sm:top-6 sm:max-w-[980px]">
+                          <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                              <CheckCircle2 className="h-5 w-5 text-primary" />
+                              Enroll in Agrobank STTP
+                            </DialogTitle>
+                            <DialogDescription>
+                              High flood risk detected. Secure your crop with Malaysia's subsidized paddy insurance.
+                            </DialogDescription>
+                          </DialogHeader>
+
+                          <div className="space-y-4 py-4">
+                            <div className="bg-muted p-4 rounded-lg space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Coverage</span>
+                                <span className="font-medium">Flood, Drought, Pests</span>
                               </div>
-                              
-                              <div className="text-xs text-muted-foreground">
-                                * Offline Registration required at your nearest Agrobank branch or PPK.
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Estimated Premium</span>
+                                <span className="font-medium">RM 64.80 / ha</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Max Payout</span>
+                                <span className="font-bold text-success">RM 3,000 / ha</span>
                               </div>
                             </div>
 
-                            <div className="flex flex-col gap-2">
-                              <InsurancePdfButton />
-                              <Button variant="outline" onClick={() => window.open("https://www.agrobank.com.my", "_blank")} className="w-full">
-                                Find Nearest Branch
-                              </Button>
+                            <div className="text-xs text-muted-foreground">
+                              * Offline Registration required at your nearest Agrobank branch or PPK.
                             </div>
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-                    )}
+                          </div>
+
+                          <div className="flex flex-col gap-2">
+                            <InsurancePdfButton />
+                            <Button variant="outline" onClick={() => window.open("https://www.agrobank.com.my", "_blank")} className="w-full">
+                              Find Nearest Branch
+                            </Button>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  )}
                 </>
               </CardContent>
             </Card>
 
-            <Card className="relative overflow-hidden border border-rose-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.98),_rgba(254,242,242,0.96)_38%,_rgba(255,241,242,0.94)_70%,_rgba(255,247,237,0.92)_100%)] py-5 shadow-[0_24px_70px_rgba(239,68,68,0.10)]">
+            <Card className="relative overflow-hidden border border-rose-200 bg-white py-5 shadow-[0_24px_70px_rgba(239,68,68,0.10)]">
               <div className="pointer-events-none absolute -top-24 right-[-6rem] h-72 w-72 rounded-full bg-rose-200/30 blur-3xl" />
               <div className="pointer-events-none absolute bottom-[-7rem] left-[-4rem] h-64 w-64 rounded-full bg-orange-200/20 blur-3xl" />
               <CardHeader className="relative space-y-4 pb-2">
                 <div className="flex items-start gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-sm ${
-                    floodRisk === "high"
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-2xl border shadow-sm ${floodRisk === "high"
                       ? "border-destructive/25 bg-destructive/10 text-destructive"
                       : "border-rose-200 bg-rose-100/80 text-rose-700"
-                  }`}>
+                    }`}>
                     <ShieldAlert className="h-4 w-4" />
                   </div>
                   <div className="space-y-1">
@@ -557,9 +612,8 @@ export default function ClimatePage() {
                           Compact decision and enrollment details.
                         </p>
                       </div>
-                        <Badge className={`w-fit px-2 py-0.5 text-[10px] ${
-                          floodRisk === "high"
-                            ? "border-destructive/25 bg-destructive/15 text-destructive"
+                      <Badge className={`w-fit px-2 py-0.5 text-[10px] ${floodRisk === "high"
+                          ? "border-destructive/25 bg-destructive/15 text-destructive"
                           : "border-rose-300/60 bg-rose-50 text-rose-800"
                         }`}>
                         {floodRisk === "high" ? "Urgent" : "Ready"}
@@ -610,11 +664,10 @@ export default function ClimatePage() {
                           Reduce uninsured flood exposure and protect recovery cash flow with subsidized coverage.
                         </p>
                       </div>
-                      <Badge className={`shrink-0 px-2.5 py-0.5 text-[10px] ${
-                        floodRisk === "high"
+                      <Badge className={`shrink-0 px-2.5 py-0.5 text-[10px] ${floodRisk === "high"
                           ? "border-destructive/25 bg-destructive/15 text-destructive"
                           : "border-rose-300/60 bg-white/80 text-rose-800"
-                      }`}>
+                        }`}>
                         {floodRisk === "high" ? "Action Needed" : "Recommended"}
                       </Badge>
                     </div>

@@ -19,6 +19,10 @@ node_modules
 
 log.txt
 
+# Local tooling and dev artifacts
+ngrok.exe
+backend/*.db
+
 # Machine Learning & Datasets Ignore
 plant_data/
 pest_data/
@@ -26,3 +30,4 @@ datasets/
 runs/
 *.pt
 __pycache__/
+tsconfig.tsbuildinfo

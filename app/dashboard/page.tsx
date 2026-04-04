@@ -7,9 +7,11 @@ import { Badge } from "@/components/ui/badge"
 import { 
   Search, Bell, ChevronDown, Droplets, Wind, Sparkles,
   TrendingUp, Cloud, Sun, CloudRain, Smartphone, Camera, 
-  Send, Bot, Leaf, Plus, VolumeX, Volume2
+  Send, Bot, Leaf, Plus, VolumeX, Volume2, Maximize2, Minimize2
 } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { QRCodeSVG } from "qrcode.react"
 
 // Reusable audio player that handles volume and autoplay securely
 const WeatherAudio = ({ src, isSoundEnabled }: { src: string, isSoundEnabled: boolean }) => {
@@ -112,8 +114,8 @@ function CircularProgress({
 
 export default function DashboardPage() {
   const [growthDay, setGrowthDay] = useState(1);
-  const weather = growthDay % 4 === 0 ? "raining" : growthDay % 3 === 0 ? "cloudy" : "sunny";
-  const humidity = weather === "raining" ? 85 : weather === "cloudy" ? 65 : 45;
+  const weather = growthDay % 4 === 0 ? "raining" : growthDay % 3 === 0 ? "cloudy" : "sunny"
+  const humidity = weather === "raining" ? 85 : weather === "cloudy" ? 65 : 45
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
 
   const [chatMessages, setChatMessages] = useState<{ role: "ai" | "user", content: string }[]>([
@@ -122,11 +124,21 @@ export default function DashboardPage() {
   const [chatInput, setChatInput] = useState("")
   const [isChatLoading, setIsChatLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
 
   const [phoneSynced, setPhoneSynced] = useState(false)
   const [plantHeight, setPlantHeight] = useState("0 cm")
+  const [arSessionId, setArSessionId] = useState<string | null>(null)
+  const isFirstRender = useRef(true)
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false)
+  const [qrUrl, setQrUrl] = useState("")
+  const [isChatPopped, setIsChatPopped] = useState(false)
 
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [chatMessages])
 
@@ -153,16 +165,155 @@ export default function DashboardPage() {
     setIsChatLoading(false)
   }
 
-  const simulatePhoneSync = () => {
-    setPhoneSynced(true)
-    const calcHeight = Math.floor(Math.pow(growthDay, 1.2)) + Math.floor(Math.random() * 5)
-    setPlantHeight(calcHeight + " cm")
+  const fetchHeightInsight = async (
+    cm: number,
+    historyBeforeUser: { role: "ai" | "user"; content: string }[],
+    day: number
+  ) => {
+    setIsChatLoading(true)
+    try {
+      const res = await fetch("/api/plant-tracker", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message:
+            "The user just synced a height measurement from their phone. Explain what this suggests about tomato progress and give brief next steps.",
+          heightCm: cm,
+          growthDay: day,
+          chatHistory: historyBeforeUser,
+        }),
+      })
+      const data = await res.json()
+      setChatMessages((prev) => [...prev, { role: "ai", content: data.reply }])
+    } catch {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: "ai",
+          content:
+            "I could not reach the botanist AI (Ollama). Height is saved — check that Ollama is running.",
+        },
+      ])
+    }
+    setIsChatLoading(false)
+  }
+
+  const handlePlantPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file || !file.type.startsWith("image/")) return
+
+    const reader = new FileReader()
+    reader.onloadend = async () => {
+      const dataUrl = reader.result as string
+      const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl
+      const userLine =
+        "[Photo] I uploaded an image of my tomato plant for your review."
+      setChatMessages((prev) => {
+        const historyForApi = prev
+        void (async () => {
+          setIsChatLoading(true)
+          try {
+            const res = await fetch("/api/plant-tracker", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                message:
+                  "Describe this tomato plant photo: growth stage, visible health, and 2 concise care tips.",
+                images: [base64],
+                growthDay,
+                chatHistory: historyForApi,
+              }),
+            })
+            const data = await res.json()
+            setChatMessages((m) => [...m, { role: "ai", content: data.reply }])
+          } catch {
+            setChatMessages((m) => [
+              ...m,
+              {
+                role: "ai",
+                content:
+                  "Could not analyze the photo. Is Ollama running with a vision model (e.g. llava)?",
+              },
+            ])
+          }
+          setIsChatLoading(false)
+        })()
+        return [...prev, { role: "user", content: userLine }]
+      })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // Polling for incoming AR measurement
+  useEffect(() => {
+    if (!isQrModalOpen || !arSessionId) return;
+
+    let timeoutId: NodeJS.Timeout;
+    let isActive = true;
     
-    // Auto-sendMessage to chatbot
-    setChatMessages(prev => [
-      ...prev, 
-      { role: "user", content: `[Phone Synced] The plant height was just measured via AR at ${calcHeight} cm on Day ${growthDay}.` }
-    ])
+    const pollMeasurement = async () => {
+      if (!isActive) return;
+      try {
+        const res = await fetch(`/api/measurement?session_id=${arSessionId}`);
+        if (!isActive) return;
+        
+        const data = await res.json();
+        
+        if (data.success && data.data) {
+          setIsQrModalOpen(false);
+          setPhoneSynced(true);
+          const measuredHeight = data.data.height_cm;
+          setPlantHeight(measuredHeight + " cm");
+          
+          const mappedDay = Math.min(Math.round((measuredHeight / 150) * 60) + 5, 60);
+          setGrowthDay(mappedDay);
+
+          setChatMessages((prev) => {
+            void fetchHeightInsight(measuredHeight, prev, mappedDay)
+            return prev
+          });
+          
+          return; // Stop polling
+        }
+      } catch (err) {
+        // Silently ignore network errors during polling to prevent Next.js dev overlay 
+        // popping up on "Failed to fetch" (which happens on HMR connection drops).
+      }
+      
+      if (isActive) {
+        timeoutId = setTimeout(pollMeasurement, 1500);
+      }
+    };
+
+    timeoutId = setTimeout(pollMeasurement, 1500);
+    
+    return () => {
+      isActive = false;
+      clearTimeout(timeoutId);
+    };
+  }, [isQrModalOpen, arSessionId]);
+
+  const openArModal = () => {
+    // Generate simple ID robust against non-https IPs
+    const newSession = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    setArSessionId(newSession);
+    
+    // Phone must open an HTTPS origin for getUserMedia on most mobile browsers.
+    // Set NEXT_PUBLIC_PHONE_BASE_URL=https://YOUR-NGROK-SUBDOMAIN.ngrok-free.app in .env.local
+    let host = window.location.origin;
+    const tunnel = process.env.NEXT_PUBLIC_PHONE_BASE_URL?.replace(/\/$/, "");
+    if (tunnel && (host.includes("localhost") || host.includes("127.0.0.1"))) {
+      host = tunnel;
+    } else if (host.includes("localhost") || host.includes("127.0.0.1")) {
+      alert(
+        "Phone camera needs HTTPS. Please set NEXT_PUBLIC_PHONE_BASE_URL to your active ngrok HTTPS URL in .env.local, then restart the app."
+      );
+      return;
+    }
+
+    setQrUrl(`${host}/measure?plant_id=tomato_1&session_id=${newSession}`);
+    setIsQrModalOpen(true);
   }
 
   // Compute styles for the tomato simulation
@@ -181,19 +332,19 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#f5f0e8] pb-12">
       {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+      <header className={`border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50 transition-all ${isChatPopped ? "hidden" : ""}`}>
         <div className="px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-lg text-foreground">Dashboard</span>
           </div>
           
           <div className="flex items-center gap-3">
-            <button className="p-2 rounded-full hover:bg-white/50 transition-colors">
-              <Search className="h-5 w-5 text-gray-600" />
+            <button suppressHydrationWarning className="p-2 rounded-full hover:bg-white/50 transition-colors">
+              <Search className="h-5 w-5 text-gray-500" />
             </button>
-            <button className="p-2 rounded-full hover:bg-white/50 transition-colors relative">
-              <Bell className="h-5 w-5 text-gray-600" />
-              <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full" />
+            <button suppressHydrationWarning className="p-2 rounded-full hover:bg-white/50 transition-colors relative">
+              <Bell className="h-5 w-5 text-gray-500" />
+              <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-slate-50"></span>
             </button>
           </div>
         </div>
@@ -256,6 +407,7 @@ export default function DashboardPage() {
                {/* Environmental Indicators & Sound Control */}
                <div className="absolute top-6 right-6 z-20 flex gap-2">
                  <button 
+                   suppressHydrationWarning
                    onClick={() => setIsSoundEnabled(!isSoundEnabled)}
                    className="bg-black/20 text-white backdrop-blur-md rounded-full shadow-sm p-2 text-sm border border-white/30 hover:bg-black/30 transition flex items-center justify-center"
                  >
@@ -537,9 +689,27 @@ export default function DashboardPage() {
                     </p>
                     
                     {!phoneSynced ? (
-                      <Button onClick={simulatePhoneSync} className="rounded-full px-6 font-medium bg-slate-800 hover:bg-slate-700">
-                        <Smartphone className="h-4 w-4 mr-2" /> Connect & Measure
-                      </Button>
+                      <Dialog open={isQrModalOpen} onOpenChange={setIsQrModalOpen}>
+                        <DialogTrigger asChild>
+                          <Button suppressHydrationWarning onClick={openArModal} className="rounded-full px-6 font-medium bg-slate-800 hover:bg-slate-700">
+                            <Smartphone className="h-4 w-4 mr-2" /> Connect & Measure
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md flex flex-col items-center bg-white border border-border">
+                          <DialogHeader>
+                            <DialogTitle className="text-center font-bold text-slate-800">Scan with Phone</DialogTitle>
+                            <DialogDescription className="text-center text-slate-500">
+                              Point your camera at this QR code to open the AR measurement tool.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="flex justify-center p-6 bg-white rounded-xl shadow-inner border border-slate-100 my-2">
+                            {qrUrl && <QRCodeSVG value={qrUrl} size={200} level="H" includeMargin={true} />}
+                          </div>
+                          <div className="text-sm text-center font-medium text-slate-500 flex items-center justify-center gap-2 mt-2">
+                             <span className="h-2.5 w-2.5 bg-emerald-500 rounded-full animate-ping"></span> Waiting for measurement...
+                          </div>
+                        </DialogContent>
+                      </Dialog>
                     ) : (
                       <div className="flex flex-col items-center">
                         <Badge className="bg-emerald-500 text-white hover:bg-emerald-600 mb-2">+ Sync Complete</Badge>
@@ -551,12 +721,24 @@ export default function DashboardPage() {
 
                  {/* Manual Add */}
                  <div className="shrink-0">
+                   <input
+                     ref={photoInputRef}
+                     type="file"
+                     accept="image/*"
+                     className="hidden"
+                     onChange={handlePlantPhoto}
+                   />
                    <h4 className="font-semibold text-sm text-slate-800 mb-2">Manual Update</h4>
                    <div className="flex gap-2">
-                     <button className="flex-1 flex gap-2 items-center justify-center border border-slate-200 rounded-lg py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+                     <button
+                       suppressHydrationWarning
+                       type="button"
+                       onClick={() => photoInputRef.current?.click()}
+                       className="flex-1 flex gap-2 items-center justify-center border border-slate-200 rounded-lg py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                     >
                        <Camera className="h-4 w-4" /> Add Photo
                      </button>
-                     <button className="flex-1 flex gap-2 items-center justify-center border border-slate-200 rounded-lg py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+                     <button suppressHydrationWarning className="flex-1 flex gap-2 items-center justify-center border border-slate-200 rounded-lg py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
                        <Plus className="h-4 w-4" /> Add Log
                      </button>
                    </div>
@@ -566,7 +748,12 @@ export default function DashboardPage() {
           </Card>
 
           {/* Plant Tracker AI Chatbot */}
-          <Card className="lg:col-span-3 flex h-full min-h-[400px] flex-col overflow-hidden rounded-2xl border border-border/50 bg-white py-0 gap-0 shadow-md">
+          <Card className={`shadow-md border border-border/50 rounded-2xl bg-white flex flex-col ${
+            isChatPopped
+              ? 'fixed inset-4 z-[100] max-w-none lg:col-span-3 h-auto'
+              : 'lg:col-span-3 h-full min-h-[400px]'
+          }`}>
+            {isChatPopped && <div className="fixed inset-0 bg-black/40 z-[-1]" onClick={() => setIsChatPopped(false)} />}
             <div className="bg-primary px-4 py-0 min-h-[60px] flex items-center justify-between shrink-0 rounded-t-2xl">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center text-xl">
@@ -577,6 +764,14 @@ export default function DashboardPage() {
                     <p className="text-xs text-primary-foreground/80 cursor-default">Tracking your tomato progress</p>
                   </div>
                 </div>
+                <button
+                  suppressHydrationWarning
+                  onClick={() => setIsChatPopped(!isChatPopped)}
+                  className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors"
+                  title={isChatPopped ? 'Minimize' : 'Expand'}
+                >
+                  {isChatPopped ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-0 space-y-4 bg-slate-50/50 pt-3">
@@ -590,7 +785,35 @@ export default function DashboardPage() {
                         ? 'bg-white border border-slate-100 text-slate-700 rounded-tl-sm'
                         : 'bg-primary text-primary-foreground rounded-tr-sm'}`}
                     >
-                       {msg.content}
+                       {msg.role === 'ai' ? (
+                         <div className="space-y-2">
+                           {msg.content.split('\n').filter((l: string) => l.trim()).map((line: string, li: number) => {
+                             const headerMatch = line.match(/^(📊|📏|✅|⚠️|🔜|🌿)\s*\*?\*?(.+?)\*?\*?\s*[—–-]\s*(.+)$/);
+                             if (headerMatch) {
+                               const emoji = headerMatch[1];
+                               const title = headerMatch[2].replace(/\*\*/g, '').trim();
+                               const body = headerMatch[3].trim();
+                               const colorMap: Record<string, string> = {
+                                 '📊': 'text-blue-600',
+                                 '📏': 'text-indigo-600',
+                                 '✅': 'text-emerald-600',
+                                 '⚠️': 'text-amber-600',
+                                 '🔜': 'text-purple-600',
+                                 '🌿': 'text-green-600',
+                               };
+                               return (
+                                 <div key={li} className="py-0.5">
+                                   <span className={`font-bold ${colorMap[emoji] || 'text-slate-800'}`}>{emoji} {title}</span>
+                                   <span className="text-slate-600"> — {body}</span>
+                                 </div>
+                               );
+                             }
+                             return <p key={li} className="text-slate-600">{line}</p>;
+                           })}
+                         </div>
+                       ) : (
+                         msg.content
+                       )}
                     </div>
                   </div>
                 ))}

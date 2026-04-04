@@ -29,6 +29,9 @@ import {
   Bot,
   User,
   Send,
+  Maximize2,
+  Minimize2,
+  X,
 } from "lucide-react"
 import {
   LineChart,
@@ -72,6 +75,8 @@ interface StrategyRecommendationCard {
   cropName: string
   topCrop: RankedCrop
   icon: CropIcon
+  iconColor: string
+  iconBg: string
   score: number
   price: string
   growthCycle: string
@@ -110,20 +115,20 @@ function getMetricTone(score: number): "strong" | "medium" | "weak" {
   return "weak"
 }
 
-function getCropIcon(cropId: string, cropName: string): CropIcon {
+function getCropInfo(cropId: string, cropName: string): { icon: CropIcon, color: string, bg: string } {
   const key = `${cropId} ${cropName}`.toLowerCase()
 
-  if (key.includes("maize") || key.includes("corn")) {
-    return Wheat
+  if (key.includes("maize") || key.includes("corn") || key.includes("wheat") || key.includes("rice")) {
+    return { icon: Wheat, color: "text-amber-600", bg: "bg-amber-100" }
   }
-  if (key.includes("chili") || key.includes("okra") || key.includes("bean")) {
-    return Carrot
+  if (key.includes("chili") || key.includes("okra") || key.includes("bean") || key.includes("carrot")) {
+    return { icon: Carrot, color: "text-orange-600", bg: "bg-orange-100" }
   }
-  if (key.includes("eggplant") || key.includes("cucumber") || key.includes("tomato")) {
-    return Apple
+  if (key.includes("eggplant") || key.includes("cucumber") || key.includes("tomato") || key.includes("apple")) {
+    return { icon: Apple, color: "text-red-600", bg: "bg-red-100" }
   }
 
-  return Leaf
+  return { icon: Leaf, color: "text-emerald-600", bg: "bg-emerald-100" }
 }
 
 function getRewardScore(crop: RankedCrop) {
@@ -470,6 +475,7 @@ function buildStrategyCards(recommendation: RecommendationResponse | null): Stra
 
   return plans.map((plan) => {
     const strategy = plan.strategy
+    const cropInfo = getCropInfo(plan.topCrop.crop_id, plan.topCrop.crop_name)
 
     return {
       strategy,
@@ -477,7 +483,9 @@ function buildStrategyCards(recommendation: RecommendationResponse | null): Stra
       cropId: plan.topCrop.crop_id,
       cropName: plan.topCrop.crop_name,
       topCrop: plan.topCrop,
-      icon: getCropIcon(plan.topCrop.crop_id, plan.topCrop.crop_name),
+      icon: cropInfo.icon,
+      iconColor: cropInfo.color,
+      iconBg: cropInfo.bg,
       score: strategy === "aggressive" ? plan.topCrop.aggressive_score : plan.topCrop.conservative_score,
       price: formatCurrency(plan.topCrop.price_result.predicted_price),
       growthCycle: `${plan.topCrop.growth_days} days`,
@@ -547,6 +555,7 @@ function PlanningPageContent() {
         "Hi! I'm your AgriFlow plan assistant. Ask me to tune this recommendation by changing budget, harvest speed, risk preference, or excluding crops.",
     },
   ])
+  const [isAssistantExpanded, setIsAssistantExpanded] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -720,7 +729,7 @@ function PlanningPageContent() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+      <header className={`border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50 transition-all ${isAssistantExpanded ? "hidden" : ""}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center">
@@ -821,7 +830,7 @@ function PlanningPageContent() {
                   <CardContent>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {strategyRecommendations.map((card) => {
-                        const Icon = card.icon
+                        const CropIconComp = card.icon
                         const isSelected = selectedRecommendation?.strategy === card.strategy
 
                         return (
@@ -833,12 +842,12 @@ function PlanningPageContent() {
                                 ? "border-primary bg-primary/5 shadow-md"
                                 : "border-border hover:border-primary/50 hover:bg-muted/50"
                             }`}
-                            >
-                              <div className="flex items-start justify-between mb-3">
-                              <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${
-                                isSelected ? "bg-primary text-primary-foreground" : "bg-muted"
+                          >
+                            <div className="flex items-start justify-between mb-3">
+                              <div className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-colors shadow-sm ${
+                                isSelected ? card.iconBg : "bg-muted"
                               }`}>
-                                <Icon className="h-5 w-5" />
+                                <CropIconComp className={`h-6 w-6 ${isSelected ? card.iconColor : "text-muted-foreground"}`} />
                               </div>
                             </div>
                             <div>
@@ -874,8 +883,8 @@ function PlanningPageContent() {
                                 {card.rationale}
                               </p>
                               <div className="mt-4 space-y-3">
-                                {card.explanationMetrics.map((item, index) => {
-                                  const Icon = getMetricIcon(item.metric)
+                                {card.explanationMetrics.map((item) => {
+                                  const MetricIcon = getMetricIcon(item.metric)
 
                                   return (
                                     <div
@@ -885,11 +894,11 @@ function PlanningPageContent() {
                                       <div className="flex items-start justify-between gap-3">
                                         <div className="flex items-center gap-3">
                                           <div className="rounded-xl bg-primary/10 p-2">
-                                            <Icon className="h-4 w-4 text-primary" />
+                                            <MetricIcon className="h-4 w-4 text-primary" />
                                           </div>
                                           <div>
                                             <p className="text-sm font-semibold text-foreground">
-                                              {index + 1}. {item.label}
+                                              {item.label}
                                             </p>
                                             <p className="text-xs text-muted-foreground">
                                               Score {(item.score * 100).toFixed(0)} / 100
@@ -901,9 +910,11 @@ function PlanningPageContent() {
                                         </span>
                                       </div>
 
-                                      <div className="mt-4 h-2 overflow-hidden rounded-full bg-primary/10">
+                                      <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
                                         <div
-                                          className="h-full rounded-full bg-primary"
+                                          className={`h-full rounded-full transition-all duration-500 ${
+                                            item.score >= 0.75 ? "bg-green-500" : item.score >= 0.45 ? "bg-orange-500" : "bg-red-500"
+                                          }`}
                                           style={{ width: `${Math.max(8, Math.round(item.score * 100))}%` }}
                                         />
                                       </div>
@@ -1047,21 +1058,47 @@ function PlanningPageContent() {
           </div>
 
           <div className="space-y-6 lg:sticky lg:top-24 h-fit">
-            <Card className="shadow-xl shadow-primary/5 border-border/50 h-[550px] flex flex-col">
-              <CardHeader className="border-b bg-muted/10 pb-4 shrink-0 flex flex-row items-center space-y-0 gap-3">
-                <div className="h-10 w-10 bg-primary/15 rounded-xl flex items-center justify-center shrink-0">
-                  <Bot className="h-5 w-5 text-primary" />
+            <Card className={`shadow-xl shadow-primary/5 border-border/50 flex flex-col transition-all duration-300 ${
+              isAssistantExpanded 
+                ? "fixed inset-4 z-[100] h-[calc(100vh-32px)] lg:inset-10 lg:h-[calc(100vh-80px)] shadow-2xl" 
+                : "h-[550px]"
+            }`}>
+              {isAssistantExpanded && (
+                <div 
+                  className="fixed inset-0 bg-background/80 backdrop-blur-sm z-[-1]" 
+                  onClick={() => setIsAssistantExpanded(false)}
+                />
+              )}
+              <CardHeader className={`border-b pb-4 shrink-0 flex flex-row items-center space-y-0 gap-3 rounded-t-xl transition-colors ${
+                isAssistantExpanded ? "bg-primary p-6" : "bg-primary/5"
+              }`}>
+                <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                  isAssistantExpanded ? "bg-white/20" : "bg-primary/15"
+                }`}>
+                  <Bot className={`h-5 w-5 ${isAssistantExpanded ? "text-white" : "text-primary"}`} />
                 </div>
                 <div className="flex-1">
-                  <CardTitle className="text-base text-foreground font-semibold">
+                  <CardTitle className={`text-base font-semibold ${isAssistantExpanded ? "text-white" : "text-foreground"}`}>
                     Plan Assistant
                   </CardTitle>
-                  <CardDescription className="text-xs">
+                  <CardDescription className={`text-xs ${isAssistantExpanded ? "text-white/70" : ""}`}>
                     {recommendation?.run_id
                       ? "Tune your crop recommendation with chat"
                       : "Tune this preview without saving it yet."}
                   </CardDescription>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-8 w-8 rounded-lg shrink-0 ${
+                    isAssistantExpanded 
+                      ? "text-white hover:bg-white/10" 
+                      : "text-muted-foreground hover:text-primary hover:bg-primary/10"
+                  }`}
+                  onClick={() => setIsAssistantExpanded(!isAssistantExpanded)}
+                >
+                  {isAssistantExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </Button>
               </CardHeader>
               <CardContent className="p-0 flex-1 overflow-hidden flex flex-col">
                 <div className="px-4 pt-4 pb-3 border-b bg-card/60 shrink-0">
