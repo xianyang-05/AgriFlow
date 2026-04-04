@@ -417,6 +417,9 @@ export default function DashboardPage() {
                    <Droplets className="h-4 w-4" />
                    Humidity: {humidity}%
                  </Badge>
+                 <Badge className="bg-black/20 text-white backdrop-blur-md rounded-full shadow-sm px-4 py-1.5 gap-2 text-sm border border-white/30 hover:bg-black/30 transition">
+                   🌱 Height: {plantHeight}
+                 </Badge>
                </div>
 
                {/* Weather Animations inside background */}

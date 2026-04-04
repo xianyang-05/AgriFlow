@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
@@ -396,7 +396,7 @@ export default function ClimatePage() {
                   <Cloud className="h-5 w-5 text-primary" />
                   Forecast Weather
                 </CardTitle>
-                <CardDescription>7-day temperature, rainfall, and sky outlook</CardDescription>
+                <CardDescription className="mb-6">7-day temperature, rainfall, and sky outlook</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
@@ -427,6 +427,34 @@ export default function ClimatePage() {
                       </p>
                     </div>
                   ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Daily Temperature & Humidity Graph */}
+            <Card className="shadow-lg shadow-primary/5">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ThermometerSun className="h-5 w-5 text-primary" />
+                  Today's Weather Forecast
+                </CardTitle>
+                <CardDescription>Hourly temperature and humidity variation</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[250px] w-full mt-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={temperatureHistory} margin={{ top: 5, right: 30, left: 10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                      <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
+                      <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
+                      <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                      />
+                      <Line yAxisId="left" type="monotone" dataKey="temp" stroke="#f43f5e" strokeWidth={3} dot={{ r: 4, fill: '#f43f5e', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} name="Temperature (°C)" />
+                      <Line yAxisId="right" type="monotone" dataKey="humidity" stroke="#0ea5e9" strokeWidth={3} dot={{ r: 4, fill: '#0ea5e9', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} name="Humidity (%)" />
+                    </LineChart>
+                  </ResponsiveContainer>
                 </div>
               </CardContent>
             </Card>

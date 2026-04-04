@@ -12,7 +12,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import {
   Leaf, AlertTriangle, Droplets, CheckCircle2,
-  Info, ArrowLeft, Send, Sparkles, Youtube, BookOpen, Clock, AlertCircle, RefreshCw, TrendingUp, ChevronLeft, ChevronRight
+  Info, ArrowLeft, Send, Sparkles, Youtube, BookOpen, Clock, AlertCircle, RefreshCw, TrendingUp, ChevronLeft, ChevronRight,
+  LayoutDashboard, ArrowRight
 } from "lucide-react"
 import {
   Dialog,
@@ -143,6 +144,7 @@ function ExecutionPlanPageContent() {
   })
   const [activeGuide, setActiveGuide] = useState<string | null>(null)
   const [activeVideoIndex, setActiveVideoIndex] = useState<number | null>(null)
+  const [showDashboardButton, setShowDashboardButton] = useState(false)
 
   const [chatMessages, setChatMessages] = useState<{ role: "ai" | "user", text: string }[]>([
     { role: "ai", text: "Hello! I'm your AgriFlow AI. How can I assist you with this execution plan today?" }
@@ -150,6 +152,15 @@ function ExecutionPlanPageContent() {
   const [draftMessage, setDraftMessage] = useState("")
 
   const chatEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const isAtBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 100
+      setShowDashboardButton(isAtBottom)
+    }
+    window.addEventListener("scroll", handleScroll)
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [])
 
   useEffect(() => {
     const workspaceCrop = readWorkspace()?.selectedExecutionCrop?.cropName
@@ -218,7 +229,7 @@ function ExecutionPlanPageContent() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-6">
+      <main className="max-w-7xl mx-auto px-6 py-6 pb-24">
         {/* Top Metrics Cards under the Toolbar */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <Card className="rounded-2xl border-0 shadow-sm bg-white overflow-hidden">
@@ -580,6 +591,27 @@ function ExecutionPlanPageContent() {
             )}
           </DialogContent>
         </Dialog>
+        <AnimatePresence>
+          {showDashboardButton && (
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              className="fixed bottom-8 left-0 right-0 z-50 flex justify-center pointer-events-none"
+            >
+              <Button
+                asChild
+                className="pointer-events-auto bg-[#0f5132] hover:bg-[#0b3d26] text-white shadow-2xl px-8 py-6 rounded-2xl gap-3 text-lg font-bold group border border-white/20 animate-bounce-subtle"
+              >
+                <Link href="/dashboard">
+                  <LayoutDashboard className="w-6 h-6" />
+                  Go to dashboard
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </Link>
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   )

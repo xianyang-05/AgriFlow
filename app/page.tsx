@@ -168,6 +168,7 @@ export default function OnboardingPage() {
   const [isSearchingMap, setIsSearchingMap] = useState(false)
   const [searchedLocation, setSearchedLocation] = useState<{lat: number; lng: number} | null>(null)
   const [hasHydratedLocalDraft, setHasHydratedLocalDraft] = useState(false)
+  const [farmSizeError, setFarmSizeError] = useState<string | null>(null)
 
   // Chatbot State
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -226,6 +227,30 @@ export default function OnboardingPage() {
     if (length <= 0 || width <= 0) return null
 
     return formatAreaInSquareMeters(length * width)
+  }
+
+  const validateFarmSize = () => {
+    if (currentStep !== 2) return true
+    
+    if (formData.requiresDimensions) {
+      const length = extractDimension(formData.farmLength)
+      const width = extractDimension(formData.farmWidth)
+      if (length <= 0 || width <= 0) {
+        setFarmSizeError("Please provide valid dimensions for your farm.")
+        return false
+      }
+    } else {
+      if (!formData.farmSize.trim()) {
+        setFarmSizeError("Farm size cannot be empty.")
+        return false
+      }
+      if (extractAreaInSquareMeters(formData.farmSize) === null) {
+        setFarmSizeError("We couldn't understand this unit. Please use acres, hectares, or provide dimensions.")
+        return false
+      }
+    }
+    setFarmSizeError(null)
+    return true
   }
 
   const buildRecommendationPayload = (draft: OnboardingFormData) => {
@@ -340,7 +365,7 @@ export default function OnboardingPage() {
   }
 
   const handleNext = () => {
-    if (currentStep < 4) {
+    if (validateFarmSize()) {
       setCurrentStep(currentStep + 1)
     }
   }
@@ -572,6 +597,7 @@ export default function OnboardingPage() {
                         onChange={(e) => {
                           const nextValue = e.target.value
                           const requiresDimensions = shouldRequireDimensions(nextValue)
+                          setFarmSizeError(null)
                           setFormData({
                             ...formData,
                             farmSize: nextValue,
@@ -580,8 +606,14 @@ export default function OnboardingPage() {
                             farmWidth: requiresDimensions ? formData.farmWidth : "",
                           })
                         }}
-                        className="pl-10 h-12"
+                        className={`pl-10 h-12 ${farmSizeError ? "border-destructive text-destructive focus-visible:ring-destructive" : ""}`}
                       />
+                      {farmSizeError && (
+                        <p className="text-xs font-medium text-destructive mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {farmSizeError}
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">

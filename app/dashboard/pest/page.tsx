@@ -243,7 +243,7 @@ export default function PestDetectionPage() {
                   <ScanLine className="h-5 w-5 text-primary" />
                   Upload Plant Image
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="mb-6">
                   Drag & drop or click to upload — YOLO AI detects objects and pests instantly
                 </CardDescription>
               </CardHeader>
