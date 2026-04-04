@@ -29,6 +29,9 @@ import {
   Bot,
   User,
   Send,
+  Maximize2,
+  Minimize2,
+  X,
 } from "lucide-react"
 import {
   LineChart,
@@ -547,6 +550,7 @@ function PlanningPageContent() {
         "Hi! I'm your AgriFlow plan assistant. Ask me to tune this recommendation by changing budget, harvest speed, risk preference, or excluding crops.",
     },
   ])
+  const [isAssistantExpanded, setIsAssistantExpanded] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -720,7 +724,7 @@ function PlanningPageContent() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+      <header className={`border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50 transition-all ${isAssistantExpanded ? "hidden" : ""}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center">
@@ -901,9 +905,11 @@ function PlanningPageContent() {
                                         </span>
                                       </div>
 
-                                      <div className="mt-4 h-2 overflow-hidden rounded-full bg-primary/10">
+                                      <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
                                         <div
-                                          className="h-full rounded-full bg-primary"
+                                          className={`h-full rounded-full transition-all duration-500 ${
+                                            item.score >= 0.75 ? "bg-green-500" : item.score >= 0.45 ? "bg-orange-500" : "bg-red-500"
+                                          }`}
                                           style={{ width: `${Math.max(8, Math.round(item.score * 100))}%` }}
                                         />
                                       </div>
@@ -1047,21 +1053,47 @@ function PlanningPageContent() {
           </div>
 
           <div className="space-y-6 lg:sticky lg:top-24 h-fit">
-            <Card className="shadow-xl shadow-primary/5 border-border/50 h-[550px] flex flex-col">
-              <CardHeader className="border-b bg-muted/10 pb-4 shrink-0 flex flex-row items-center space-y-0 gap-3">
-                <div className="h-10 w-10 bg-primary/15 rounded-xl flex items-center justify-center shrink-0">
-                  <Bot className="h-5 w-5 text-primary" />
+            <Card className={`shadow-xl shadow-primary/5 border-border/50 flex flex-col transition-all duration-300 ${
+              isAssistantExpanded 
+                ? "fixed inset-4 z-[100] h-[calc(100vh-32px)] lg:inset-10 lg:h-[calc(100vh-80px)] shadow-2xl" 
+                : "h-[550px]"
+            }`}>
+              {isAssistantExpanded && (
+                <div 
+                  className="fixed inset-0 bg-background/80 backdrop-blur-sm z-[-1]" 
+                  onClick={() => setIsAssistantExpanded(false)}
+                />
+              )}
+              <CardHeader className={`border-b pb-4 shrink-0 flex flex-row items-center space-y-0 gap-3 rounded-t-xl transition-colors ${
+                isAssistantExpanded ? "bg-primary p-6" : "bg-primary/5"
+              }`}>
+                <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+                  isAssistantExpanded ? "bg-white/20" : "bg-primary/15"
+                }`}>
+                  <Bot className={`h-5 w-5 ${isAssistantExpanded ? "text-white" : "text-primary"}`} />
                 </div>
                 <div className="flex-1">
-                  <CardTitle className="text-base text-foreground font-semibold">
+                  <CardTitle className={`text-base font-semibold ${isAssistantExpanded ? "text-white" : "text-foreground"}`}>
                     Plan Assistant
                   </CardTitle>
-                  <CardDescription className="text-xs">
+                  <CardDescription className={`text-xs ${isAssistantExpanded ? "text-white/70" : ""}`}>
                     {recommendation?.run_id
                       ? "Tune your crop recommendation with chat"
                       : "Tune this preview without saving it yet."}
                   </CardDescription>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`h-8 w-8 rounded-lg shrink-0 ${
+                    isAssistantExpanded 
+                      ? "text-white hover:bg-white/10" 
+                      : "text-muted-foreground hover:text-primary hover:bg-primary/10"
+                  }`}
+                  onClick={() => setIsAssistantExpanded(!isAssistantExpanded)}
+                >
+                  {isAssistantExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </Button>
               </CardHeader>
               <CardContent className="p-0 flex-1 overflow-hidden flex flex-col">
                 <div className="px-4 pt-4 pb-3 border-b bg-card/60 shrink-0">

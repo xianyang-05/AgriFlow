@@ -107,6 +107,7 @@ export interface RecommendationResponse {
   aggressive_plan?: CropPlan | null
   conservative_plan?: CropPlan | null
   explanation: string
+  climate_output?: ClimateOutput | null
 }
 
 export interface RecommendationChatResponse {

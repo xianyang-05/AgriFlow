@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { 
   Search, Bell, ChevronDown, Droplets, Wind, Sparkles,
   TrendingUp, Cloud, Sun, CloudRain, Smartphone, Camera, 
-  Send, Bot, Leaf, Plus, VolumeX, Volume2
+  Send, Bot, Leaf, Plus, VolumeX, Volume2, Maximize2, Minimize2
 } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -132,6 +132,7 @@ export default function DashboardPage() {
   const [arSessionId, setArSessionId] = useState<string | null>(null)
   const [isQrModalOpen, setIsQrModalOpen] = useState(false)
   const [qrUrl, setQrUrl] = useState("")
+  const [isChatPopped, setIsChatPopped] = useState(false)
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -264,10 +265,9 @@ export default function DashboardPage() {
           const mappedDay = Math.min(Math.round((measuredHeight / 150) * 60) + 5, 60);
           setGrowthDay(mappedDay);
 
-          const userLine = `[Phone] Measured height: ${measuredHeight} cm (simulation day ${mappedDay}).`
           setChatMessages((prev) => {
             void fetchHeightInsight(measuredHeight, prev, mappedDay)
-            return [...prev, { role: "user", content: userLine }]
+            return prev
           });
           
           return; // Stop polling
@@ -328,7 +328,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-[#f5f0e8] pb-12">
       {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+      <header className={`border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50 transition-all ${isChatPopped ? "hidden" : ""}`}>
         <div className="px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-lg text-foreground">Dashboard</span>
@@ -742,7 +742,12 @@ export default function DashboardPage() {
           </Card>
 
           {/* Plant Tracker AI Chatbot */}
-          <Card className="lg:col-span-3 shadow-md border border-border/50 rounded-2xl bg-white flex flex-col h-full min-h-[400px]">
+          <Card className={`shadow-md border border-border/50 rounded-2xl bg-white flex flex-col ${
+            isChatPopped
+              ? 'fixed inset-4 z-[100] max-w-none lg:col-span-3 h-auto'
+              : 'lg:col-span-3 h-full min-h-[400px]'
+          }`}>
+            {isChatPopped && <div className="fixed inset-0 bg-black/40 z-[-1]" onClick={() => setIsChatPopped(false)} />}
             <div className="bg-primary px-4 py-0 min-h-[60px] flex items-center justify-between shrink-0 rounded-t-2xl">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center text-xl">
@@ -753,6 +758,13 @@ export default function DashboardPage() {
                     <p className="text-xs text-primary-foreground/80 cursor-default">Tracking your tomato progress</p>
                   </div>
                 </div>
+                <button
+                  onClick={() => setIsChatPopped(!isChatPopped)}
+                  className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center transition-colors"
+                  title={isChatPopped ? 'Minimize' : 'Expand'}
+                >
+                  {isChatPopped ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-0 space-y-4 bg-slate-50/50 pt-3">
@@ -766,7 +778,35 @@ export default function DashboardPage() {
                         ? 'bg-white border border-slate-100 text-slate-700 rounded-tl-sm'
                         : 'bg-primary text-primary-foreground rounded-tr-sm'}`}
                     >
-                       {msg.content}
+                       {msg.role === 'ai' ? (
+                         <div className="space-y-2">
+                           {msg.content.split('\n').filter((l: string) => l.trim()).map((line: string, li: number) => {
+                             const headerMatch = line.match(/^(📊|📏|✅|⚠️|🔜|🌿)\s*\*?\*?(.+?)\*?\*?\s*[—–-]\s*(.+)$/);
+                             if (headerMatch) {
+                               const emoji = headerMatch[1];
+                               const title = headerMatch[2].replace(/\*\*/g, '').trim();
+                               const body = headerMatch[3].trim();
+                               const colorMap: Record<string, string> = {
+                                 '📊': 'text-blue-600',
+                                 '📏': 'text-indigo-600',
+                                 '✅': 'text-emerald-600',
+                                 '⚠️': 'text-amber-600',
+                                 '🔜': 'text-purple-600',
+                                 '🌿': 'text-green-600',
+                               };
+                               return (
+                                 <div key={li} className="py-0.5">
+                                   <span className={`font-bold ${colorMap[emoji] || 'text-slate-800'}`}>{emoji} {title}</span>
+                                   <span className="text-slate-600"> — {body}</span>
+                                 </div>
+                               );
+                             }
+                             return <p key={li} className="text-slate-600">{line}</p>;
+                           })}
+                         </div>
+                       ) : (
+                         msg.content
+                       )}
                     </div>
                   </div>
                 ))}

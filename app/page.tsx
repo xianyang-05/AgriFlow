@@ -25,6 +25,8 @@ import {
   User,
   Wallet,
   X,
+  Maximize2,
+  Minimize2,
 } from "lucide-react"
 import dynamic from "next/dynamic"
 import Image from "next/image"
@@ -164,6 +166,7 @@ export default function OnboardingPage() {
   const [chatMessages, setChatMessages] = useState<{role: "user" | "bot", content: string, type: "text" | "image", imageUrl?: string}[]>([
     { role: "bot", content: "Hi! I'm your Agritwin soil assistant. Describe your soil's texture, color, or behavior, or upload a photo to get help identifying it.", type: "text" }
   ])
+  const [isSoilAssistantExpanded, setIsSoilAssistantExpanded] = useState(false)
 
   // Helper to highlight soil type names in bot messages
   const highlightSoilTypes = (text: string) => {
@@ -361,7 +364,7 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+      <header className={`border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50 transition-all ${isSoilAssistantExpanded ? "hidden" : ""}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-xl bg-primary flex items-center justify-center">
@@ -432,7 +435,7 @@ export default function OnboardingPage() {
               <CardTitle className="text-2xl">
                 {currentStep === 1 && "Where is your farm located?"}
                 {currentStep === 2 && "Tell us about your farm"}
-                {currentStep === 3 && "What&apos;s your budget?"}
+                {currentStep === 3 && "What's your budget?"}
                 {currentStep === 4 && "What type of soil do you have?"}
               </CardTitle>
               <CardDescription>
@@ -752,15 +755,37 @@ export default function OnboardingPage() {
 
           {/* Chatbot Card */}
           {currentStep === 4 && (
-            <Card className="shadow-xl shadow-primary/5 border-border/50 lg:col-span-2 h-[550px] flex flex-col animate-in fade-in slide-in-from-right-4 duration-500">
-              <CardHeader className="border-b bg-muted/10 pb-4 h-18 shrink-0 flex flex-row items-center space-y-0 gap-3">
-                <div className="h-10 w-10 bg-primary/15 rounded-xl flex items-center justify-center shrink-0">
-                  <Bot className="h-5 w-5 text-primary" />
+            <Card className={`shadow-xl shadow-primary/5 border-border/50 lg:col-span-2 flex flex-col animate-in fade-in transition-all duration-300 ${
+              isSoilAssistantExpanded 
+                ? "fixed inset-4 z-[100] h-[calc(100vh-32px)] lg:inset-10 lg:h-[calc(100vh-80px)] shadow-2xl" 
+                : "h-[550px] slide-in-from-right-4"
+            }`}>
+              {isSoilAssistantExpanded && (
+                <div 
+                  className="fixed inset-0 bg-background/80 backdrop-blur-sm z-[-1]" 
+                  onClick={() => setIsSoilAssistantExpanded(false)}
+                />
+              )}
+              <CardHeader className={`border-b pb-4 h-18 shrink-0 flex flex-row items-center space-y-0 gap-3 rounded-t-xl transition-colors ${
+                isSoilAssistantExpanded ? "bg-primary p-6" : "bg-primary"
+              }`}>
+                <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  isSoilAssistantExpanded ? "bg-white/20" : "bg-white/20"
+                }`}>
+                  <Bot className="h-5 w-5 text-white" />
                 </div>
                 <div className="flex-1">
-                  <CardTitle className="text-base text-foreground font-semibold">Soil Assistant</CardTitle>
-                  <CardDescription className="text-xs">AI identifying your soil</CardDescription>
+                  <CardTitle className="text-base text-white font-semibold">Soil Assistant</CardTitle>
+                  <CardDescription className="text-xs text-white/70">Describe or upload — I'll identify it</CardDescription>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-lg shrink-0 text-white hover:bg-white/10"
+                  onClick={() => setIsSoilAssistantExpanded(!isSoilAssistantExpanded)}
+                >
+                  {isSoilAssistantExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                </Button>
               </CardHeader>
               <CardContent className="p-0 flex-1 overflow-hidden flex flex-col">
                 {/* Chat Messages */}
@@ -808,6 +833,33 @@ export default function OnboardingPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Quick action chips — only show when no user messages yet */}
+                {chatMessages.filter(m => m.role === 'user').length === 0 && !isChatLoading && (
+                  <div className="px-4 pb-2 flex flex-wrap gap-2">
+                    {[
+                      { label: '📷 Upload Photo', action: 'photo' },
+                      { label: '🟤 Dark & crumbly', action: 'dark crumbly moist soil' },
+                      { label: '🔴 Sticky & dense', action: 'sticky dense reddish soil' },
+                      { label: '🟡 Sandy & loose', action: 'loose sandy gritty light soil' },
+                    ].map((chip) => (
+                      <button
+                        key={chip.label}
+                        type="button"
+                        className="text-xs px-3 py-1.5 rounded-full border border-primary/30 bg-primary/5 text-primary font-medium hover:bg-primary/15 transition-colors"
+                        onClick={() => {
+                          if (chip.action === 'photo') {
+                            fileInputRef.current?.click()
+                          } else {
+                            setChatInput(chip.action)
+                          }
+                        }}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 
                 {/* Chat Input */}
                 <div className="p-3 border-t bg-card shrink-0">
