@@ -10,6 +10,8 @@ import {
   Send, Bot, Leaf, Plus, VolumeX, Volume2
 } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { QRCodeSVG } from "qrcode.react"
 
 // Reusable audio player that handles volume and autoplay securely
 const WeatherAudio = ({ src, isSoundEnabled }: { src: string, isSoundEnabled: boolean }) => {
@@ -112,8 +114,8 @@ function CircularProgress({
 
 export default function DashboardPage() {
   const [growthDay, setGrowthDay] = useState(1);
-  const weather = growthDay % 4 === 0 ? "raining" : growthDay % 3 === 0 ? "cloudy" : "sunny";
-  const humidity = weather === "raining" ? 85 : weather === "cloudy" ? 65 : 45;
+  const weather = growthDay % 4 === 0 ? "raining" : growthDay % 3 === 0 ? "cloudy" : "sunny"
+  const humidity = weather === "raining" ? 85 : weather === "cloudy" ? 65 : 45
   const [isSoundEnabled, setIsSoundEnabled] = useState(false);
 
   const [chatMessages, setChatMessages] = useState<{ role: "ai" | "user", content: string }[]>([
@@ -122,9 +124,14 @@ export default function DashboardPage() {
   const [chatInput, setChatInput] = useState("")
   const [isChatLoading, setIsChatLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const photoInputRef = useRef<HTMLInputElement>(null)
 
   const [phoneSynced, setPhoneSynced] = useState(false)
   const [plantHeight, setPlantHeight] = useState("0 cm")
+
+  const [arSessionId, setArSessionId] = useState<string | null>(null)
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false)
+  const [qrUrl, setQrUrl] = useState("")
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -153,16 +160,156 @@ export default function DashboardPage() {
     setIsChatLoading(false)
   }
 
-  const simulatePhoneSync = () => {
-    setPhoneSynced(true)
-    const calcHeight = Math.floor(Math.pow(growthDay, 1.2)) + Math.floor(Math.random() * 5)
-    setPlantHeight(calcHeight + " cm")
+  const fetchHeightInsight = async (
+    cm: number,
+    historyBeforeUser: { role: "ai" | "user"; content: string }[],
+    day: number
+  ) => {
+    setIsChatLoading(true)
+    try {
+      const res = await fetch("/api/plant-tracker", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message:
+            "The user just synced a height measurement from their phone. Explain what this suggests about tomato progress and give brief next steps.",
+          heightCm: cm,
+          growthDay: day,
+          chatHistory: historyBeforeUser,
+        }),
+      })
+      const data = await res.json()
+      setChatMessages((prev) => [...prev, { role: "ai", content: data.reply }])
+    } catch {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          role: "ai",
+          content:
+            "I could not reach the botanist AI (Ollama). Height is saved — check that Ollama is running.",
+        },
+      ])
+    }
+    setIsChatLoading(false)
+  }
+
+  const handlePlantPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file || !file.type.startsWith("image/")) return
+
+    const reader = new FileReader()
+    reader.onloadend = async () => {
+      const dataUrl = reader.result as string
+      const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl
+      const userLine =
+        "[Photo] I uploaded an image of my tomato plant for your review."
+      setChatMessages((prev) => {
+        const historyForApi = prev
+        void (async () => {
+          setIsChatLoading(true)
+          try {
+            const res = await fetch("/api/plant-tracker", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                message:
+                  "Describe this tomato plant photo: growth stage, visible health, and 2 concise care tips.",
+                images: [base64],
+                growthDay,
+                chatHistory: historyForApi,
+              }),
+            })
+            const data = await res.json()
+            setChatMessages((m) => [...m, { role: "ai", content: data.reply }])
+          } catch {
+            setChatMessages((m) => [
+              ...m,
+              {
+                role: "ai",
+                content:
+                  "Could not analyze the photo. Is Ollama running with a vision model (e.g. llava)?",
+              },
+            ])
+          }
+          setIsChatLoading(false)
+        })()
+        return [...prev, { role: "user", content: userLine }]
+      })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // Polling for incoming AR measurement
+  useEffect(() => {
+    if (!isQrModalOpen || !arSessionId) return;
+
+    let timeoutId: NodeJS.Timeout;
+    let isActive = true;
     
-    // Auto-sendMessage to chatbot
-    setChatMessages(prev => [
-      ...prev, 
-      { role: "user", content: `[Phone Synced] The plant height was just measured via AR at ${calcHeight} cm on Day ${growthDay}.` }
-    ])
+    const pollMeasurement = async () => {
+      if (!isActive) return;
+      try {
+        const res = await fetch(`/api/measurement?session_id=${arSessionId}`);
+        if (!isActive) return;
+        
+        const data = await res.json();
+        
+        if (data.success && data.data) {
+          setIsQrModalOpen(false);
+          setPhoneSynced(true);
+          const measuredHeight = data.data.height_cm;
+          setPlantHeight(measuredHeight + " cm");
+          
+          const mappedDay = Math.min(Math.round((measuredHeight / 150) * 60) + 5, 60);
+          setGrowthDay(mappedDay);
+
+          const userLine = `[Phone] Measured height: ${measuredHeight} cm (simulation day ${mappedDay}).`
+          setChatMessages((prev) => {
+            void fetchHeightInsight(measuredHeight, prev, mappedDay)
+            return [...prev, { role: "user", content: userLine }]
+          });
+          
+          return; // Stop polling
+        }
+      } catch (err) {
+        // Silently ignore network errors during polling to prevent Next.js dev overlay 
+        // popping up on "Failed to fetch" (which happens on HMR connection drops).
+      }
+      
+      if (isActive) {
+        timeoutId = setTimeout(pollMeasurement, 1500);
+      }
+    };
+
+    timeoutId = setTimeout(pollMeasurement, 1500);
+    
+    return () => {
+      isActive = false;
+      clearTimeout(timeoutId);
+    };
+  }, [isQrModalOpen, arSessionId]);
+
+  const openArModal = () => {
+    // Generate simple ID robust against non-https IPs
+    const newSession = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    setArSessionId(newSession);
+    
+    // Phone must open an HTTPS origin for getUserMedia on most mobile browsers.
+    // Set NEXT_PUBLIC_PHONE_BASE_URL=https://YOUR-NGROK-SUBDOMAIN.ngrok-free.app in .env.local
+    let host = window.location.origin;
+    const tunnel = process.env.NEXT_PUBLIC_PHONE_BASE_URL?.replace(/\/$/, "");
+    if (tunnel && (host.includes("localhost") || host.includes("127.0.0.1"))) {
+      host = tunnel;
+    } else if (host.includes("localhost") || host.includes("127.0.0.1")) {
+      alert(
+        "Phone camera needs HTTPS. Please set NEXT_PUBLIC_PHONE_BASE_URL to your active ngrok HTTPS URL in .env.local, then restart the app."
+      );
+      return;
+    }
+
+    setQrUrl(`${host}/measure?plant_id=tomato_1&session_id=${newSession}`);
+    setIsQrModalOpen(true);
   }
 
   // Compute styles for the tomato simulation
@@ -188,12 +335,12 @@ export default function DashboardPage() {
           </div>
           
           <div className="flex items-center gap-3">
-            <button className="p-2 rounded-full hover:bg-white/50 transition-colors">
-              <Search className="h-5 w-5 text-gray-600" />
+            <button suppressHydrationWarning className="p-2 rounded-full hover:bg-white/50 transition-colors">
+              <Search className="h-5 w-5 text-gray-500" />
             </button>
-            <button className="p-2 rounded-full hover:bg-white/50 transition-colors relative">
-              <Bell className="h-5 w-5 text-gray-600" />
-              <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full" />
+            <button suppressHydrationWarning className="p-2 rounded-full hover:bg-white/50 transition-colors relative">
+              <Bell className="h-5 w-5 text-gray-500" />
+              <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-slate-50"></span>
             </button>
           </div>
         </div>
@@ -537,9 +684,27 @@ export default function DashboardPage() {
                     </p>
                     
                     {!phoneSynced ? (
-                      <Button onClick={simulatePhoneSync} className="rounded-full px-6 font-medium bg-slate-800 hover:bg-slate-700">
-                        <Smartphone className="h-4 w-4 mr-2" /> Connect & Measure
-                      </Button>
+                      <Dialog open={isQrModalOpen} onOpenChange={setIsQrModalOpen}>
+                        <DialogTrigger asChild>
+                          <Button onClick={openArModal} className="rounded-full px-6 font-medium bg-slate-800 hover:bg-slate-700">
+                            <Smartphone className="h-4 w-4 mr-2" /> Connect & Measure
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-md flex flex-col items-center bg-white border border-border">
+                          <DialogHeader>
+                            <DialogTitle className="text-center font-bold text-slate-800">Scan with Phone</DialogTitle>
+                            <DialogDescription className="text-center text-slate-500">
+                              Point your camera at this QR code to open the AR measurement tool.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="flex justify-center p-6 bg-white rounded-xl shadow-inner border border-slate-100 my-2">
+                            {qrUrl && <QRCodeSVG value={qrUrl} size={200} level="H" includeMargin={true} />}
+                          </div>
+                          <div className="text-sm text-center font-medium text-slate-500 flex items-center justify-center gap-2 mt-2">
+                             <span className="h-2.5 w-2.5 bg-emerald-500 rounded-full animate-ping"></span> Waiting for measurement...
+                          </div>
+                        </DialogContent>
+                      </Dialog>
                     ) : (
                       <div className="flex flex-col items-center">
                         <Badge className="bg-emerald-500 text-white hover:bg-emerald-600 mb-2">+ Sync Complete</Badge>
@@ -551,9 +716,20 @@ export default function DashboardPage() {
 
                  {/* Manual Add */}
                  <div className="shrink-0">
+                   <input
+                     ref={photoInputRef}
+                     type="file"
+                     accept="image/*"
+                     className="hidden"
+                     onChange={handlePlantPhoto}
+                   />
                    <h4 className="font-semibold text-sm text-slate-800 mb-2">Manual Update</h4>
                    <div className="flex gap-2">
-                     <button className="flex-1 flex gap-2 items-center justify-center border border-slate-200 rounded-lg py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+                     <button
+                       type="button"
+                       onClick={() => photoInputRef.current?.click()}
+                       className="flex-1 flex gap-2 items-center justify-center border border-slate-200 rounded-lg py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                     >
                        <Camera className="h-4 w-4" /> Add Photo
                      </button>
                      <button className="flex-1 flex gap-2 items-center justify-center border border-slate-200 rounded-lg py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">

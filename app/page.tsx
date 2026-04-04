@@ -104,6 +104,24 @@ const formatAreaInSquareMeters = (area: number) => {
   return `${normalizedArea} square meters`
 }
 
+const extractAreaInSquareMeters = (text: string) => {
+  const match = text.match(/[\d.]+/)
+  const count = match ? Number.parseFloat(match[0]) : 0
+  if (!count) return null
+
+  const normalized = text.toLowerCase()
+  let multiplier = 0
+
+  if (normalized.includes("m2") || normalized.includes("sqm") || normalized.includes("square meter") || normalized.includes("square meters")) multiplier = 1
+  else if (normalized.includes("acre") || normalized.includes("acres") || normalized.includes("ekar") || normalized.includes("ekars")) multiplier = 4046.86
+  else if (normalized.includes("rai")) multiplier = 1600
+  else if (normalized.includes("hectare") || normalized.includes("hectares")) multiplier = 10000
+  else if (normalized.includes("football field") || normalized.includes("football fields")) multiplier = 7140
+
+  if (multiplier === 0) return null
+  return count * multiplier
+}
+
 const SelectMap = dynamic(() => import("@/components/SelectMap"), { ssr: false })
 
 const steps = [
@@ -508,11 +526,18 @@ export default function OnboardingPage() {
                         className="pl-10 h-12"
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Supported direct inputs include square meters, acres, ekar, rai,
-                      hectares, and football fields. For descriptive measurements like
-                      objects or steps, we&apos;ll ask for exact dimensions below.
-                    </p>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        Supported direct inputs include square meters, acres, ekar, rai,
+                        hectares, and football fields. For descriptive measurements like
+                        objects or steps, we&apos;ll ask for exact dimensions below.
+                      </p>
+                      {!formData.requiresDimensions && extractAreaInSquareMeters(formData.farmSize) !== null && (
+                        <p className="text-sm font-medium text-primary mt-2">
+                          Approximate Area: {formatAreaInSquareMeters(extractAreaInSquareMeters(formData.farmSize)!)}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   {formData.requiresDimensions && (
                     <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-4 animate-in fade-in slide-in-from-top-2">
@@ -521,11 +546,11 @@ export default function OnboardingPage() {
                       </p>
                       <div className="flex gap-4">
                         <div className="space-y-2 flex-1">
-                          <Label htmlFor="farmLength">Length (m)</Label>
+                          <Label htmlFor="farmLength">Length</Label>
                           <Input
                             id="farmLength"
                             type="text"
-                            placeholder="e.g., 100"
+                            placeholder="e.g., 5 cars"
                             value={formData.farmLength}
                             onChange={(e) => setFormData({ ...formData, farmLength: e.target.value })}
                             className="h-11"
@@ -537,11 +562,11 @@ export default function OnboardingPage() {
                           )}
                         </div>
                         <div className="space-y-2 flex-1">
-                          <Label htmlFor="farmWidth">Width (m)</Label>
+                          <Label htmlFor="farmWidth">Width</Label>
                           <Input
                             id="farmWidth"
                             type="text"
-                            placeholder="e.g., 50"
+                            placeholder="e.g., 10 brooms"
                             value={formData.farmWidth}
                             onChange={(e) => setFormData({ ...formData, farmWidth: e.target.value })}
                             className="h-11"

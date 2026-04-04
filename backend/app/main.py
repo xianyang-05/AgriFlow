@@ -73,3 +73,4 @@ async def domain_error_handler(_: Request, exc: DomainError) -> JSONResponse:
 async def generic_error_handler(_: Request, exc: Exception) -> JSONResponse:
     logger.exception("request.failed", error=str(exc), **get_request_logging_context())
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+

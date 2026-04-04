@@ -13,17 +13,25 @@ interface TrailParticle {
 export default function CursorEffect() {
   const [cursorPos, setCursorPos] = useState({ x: -100, y: -100 })
   const [particles, setParticles] = useState<TrailParticle[]>([])
+  const [enabled, setEnabled] = useState(true)
   const pathname = usePathname()
 
   const particleIdRef = useRef(0)
 
   useEffect(() => {
+    const isMeasurePage = pathname === "/measure"
+    const coarsePointer =
+      typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches
+    setEnabled(!isMeasurePage && !coarsePointer)
+  }, [pathname])
+
+  useEffect(() => {
+    if (!enabled) return
+
     const handleMouseMove = (e: MouseEvent) => {
-      // Update real cursor position
       setCursorPos({ x: e.clientX, y: e.clientY })
 
-      // Generate a few golden rice sparsely
-      if (Math.random() < 0.15) { // 15% chance to drop rice on move
+      if (Math.random() < 0.15) {
         const offsetX = (Math.random() - 0.5) * 30
         const offsetY = (Math.random() - 0.5) * 30
         setParticles(prev => [
@@ -38,9 +46,11 @@ export default function CursorEffect() {
     return () => {
       window.removeEventListener("mousemove", handleMouseMove)
     }
-  }, [])
+  }, [enabled])
 
   useEffect(() => {
+    if (!enabled) return
+
     const interval = setInterval(() => {
       setParticles((prev) =>
         prev
@@ -49,10 +59,12 @@ export default function CursorEffect() {
       )
     }, 50)
     return () => clearInterval(interval)
-  }, [])
+  }, [enabled])
+
+  if (!enabled) return null
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[9999] overflow-hidden">
+    <div className="pointer-events-none fixed inset-0 z-9999 overflow-hidden">
       {/* Custom Paddy Cursor */}
       <img 
         src="/paddy.png" 

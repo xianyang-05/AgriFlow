@@ -5,6 +5,28 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  async headers() {
+    return [
+      {
+        source: "/measure",
+        headers: [
+          {
+            key: "Permissions-Policy",
+            value: "camera=(self), microphone=()",
+          },
+        ],
+      },
+      {
+        source: "/measure/:path*",
+        headers: [
+          {
+            key: "Permissions-Policy",
+            value: "camera=(self), microphone=()",
+          },
+        ],
+      },
+    ];
+  },
   turbopack: {
     root: __dirname,
   },
