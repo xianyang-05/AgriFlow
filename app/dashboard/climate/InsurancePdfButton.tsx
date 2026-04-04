@@ -174,8 +174,8 @@ function SignaturePad({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
+    <div className="space-y-2 overflow-x-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <Label className="text-xs">E-Signature</Label>
         <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={clearSignature}>
           <RotateCcw className="mr-1 h-3.5 w-3.5" />
@@ -271,11 +271,11 @@ export default function InsurancePdfButton() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-3 rounded-xl border border-border bg-muted/50 p-4">
+    <div className="space-y-4 overflow-x-hidden">
+      <div className="space-y-3 overflow-x-hidden rounded-xl border border-border bg-muted/50 p-4">
         <div className="mb-2 text-sm font-semibold">Applicant Details</div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
             <Label htmlFor="fullName" className="text-xs">Full Name</Label>
             <Input id="fullName" name="fullName" value={formData.fullName} onChange={handleChange} className="h-8 text-xs" />
@@ -286,7 +286,7 @@ export default function InsurancePdfButton() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
             <Label htmlFor="contact" className="text-xs">Contact Number</Label>
             <Input id="contact" name="contact" value={formData.contact} onChange={handleChange} className="h-8 text-xs" />
