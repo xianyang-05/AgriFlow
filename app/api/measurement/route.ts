@@ -66,16 +66,6 @@ async function readBackendJson(response: Response) {
   }
 }
 
-function getCachedMeasurement(sessionId: string) {
-  const measurement = cache[sessionId];
-  if (!measurement) {
-    return null;
-  }
-
-  delete cache[sessionId];
-  return measurement;
-}
-
 // Desktop calls this to poll for results
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -83,11 +73,6 @@ export async function GET(request: Request) {
 
   if (!sessionId) {
     return NextResponse.json({ error: 'session_id is required' }, { status: 400 });
-  }
-
-  const cachedMeasurement = getCachedMeasurement(sessionId);
-  if (cachedMeasurement) {
-    return NextResponse.json({ success: true, data: cachedMeasurement });
   }
 
   const backendUrl = `${getApiBaseUrl(request)}/api/v1/measurements/${encodeURIComponent(sessionId)}`;
@@ -102,16 +87,20 @@ export async function GET(request: Request) {
     if (response.ok || response.status === 202) {
       return NextResponse.json(payload, { status: response.status });
     }
+
+    if (!isLocalRequest(request)) {
+      return NextResponse.json(payload ?? { error: 'Measurement lookup failed' }, { status: response.status });
+    }
   } catch {
+    if (!isLocalRequest(request)) {
+      return NextResponse.json({ error: 'Measurement lookup failed' }, { status: 502 });
+    }
   }
 
-  const fallbackMeasurement = getCachedMeasurement(sessionId);
-  if (fallbackMeasurement) {
-    return NextResponse.json({ success: true, data: fallbackMeasurement });
-  }
-
-  if (!isLocalRequest(request)) {
-    return NextResponse.json({ success: false, message: 'Waiting for data...' }, { status: 202 });
+  const measurement = cache[sessionId];
+  if (measurement) {
+    delete cache[sessionId];
+    return NextResponse.json({ success: true, data: measurement });
   }
 
   return NextResponse.json({ success: false, message: 'Waiting for data...' }, { status: 202 });
@@ -133,12 +122,6 @@ export async function POST(request: Request) {
       plant_id,
       height_cm,
     };
-    const cachedMeasurement: CachedMeasurement = {
-      plant_id,
-      height_cm: Number(height_cm),
-      timestamp: new Date().toISOString()
-    };
-    cache[session_id] = cachedMeasurement;
 
     try {
       const response = await fetch(backendUrl, {
@@ -152,14 +135,23 @@ export async function POST(request: Request) {
       if (response.ok) {
         return NextResponse.json(data, { status: response.status });
       }
+
+      if (!isLocalRequest(request)) {
+        return NextResponse.json(data ?? { error: 'Failed to save measurement' }, { status: response.status });
+      }
     } catch {
+      if (!isLocalRequest(request)) {
+        return NextResponse.json({ error: 'Failed to save measurement' }, { status: 502 });
+      }
     }
 
-    return NextResponse.json({
-      success: true,
-      degraded: true,
-      message: 'Measurement captured. Durable storage is temporarily unavailable, so sync will rely on the active web session.',
-    });
+    cache[session_id] = {
+      plant_id,
+      height_cm: Number(height_cm),
+      timestamp: new Date().toISOString()
+    };
+
+    return NextResponse.json({ success: true, message: 'Measurement saved locally.' });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to process payload' }, { status: 400 });
   }
